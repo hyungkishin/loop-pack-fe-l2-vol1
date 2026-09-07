@@ -31,7 +31,7 @@
 | `device` | 시드 스키마에 맞춘 `mobile`·`tablet`·`desktop`·`null` |
 | `userId` | 로그인 상태에서만 포함 |
 
-`AnalyticsBoundary`는 storefront layout에서 로거를 초기화한다. 서버에서 전달한 사용자 정보의 변화에 맞춰 `identify()`와 `reset()`을 한 곳에서 호출한다. 초기화 전에 발생한 이벤트는 스타터 로거의 큐에 저장되므로 목록 진입 이벤트가 유실되지 않는다.
+`AnalyticsBoundary`는 storefront layout에서 로거를 초기화한다. 서버에서 전달한 사용자 정보의 변화에 맞춰 `identify()`와 `reset()`을 한 곳에서 호출한다. 초기화 전에 발생한 이벤트는 스타터 로거의 큐에 저장되므로 목록 진입 이벤트가 유실되지 않는다. 다만 유실과 값이 비는 것은 다른 문제다. `track()`이 큐에 넣는 시점에 공통 프로퍼티를 합치면, `setCommonProperties` 등록보다 먼저 발생한 이벤트는 `sessionId`·`device`·`ts`가 빈 값으로 확정된다. 등록도 `track()` 호출도 화면의 effect에서 일어나 순서가 컴포넌트 배치와 Suspense 경계에 따라 달라진다. 그래서 합치는 시점을 전송 직전으로 옮겨 순서에 기대지 않게 했다. 현재 배치에서는 두 순서 모두 값이 채워지는 것을 확인했지만, 순서가 보장되지 않는 구조 자체를 없앴다.
 
 로그인 성공 시에는 API 응답의 `user.id`를 먼저 `identify()`한 다음 `login_success`를 보낸다. layout 갱신을 기다리면 성공 이벤트에 사용자 ID가 없어 시드 로그와 같은 기준으로 퍼널을 분석할 수 없기 때문이다. 이후 `AnalyticsBoundary`에서는 새로고침과 직접 진입 시 사용자 식별 정보를 복원한다.
 

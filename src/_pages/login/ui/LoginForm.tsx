@@ -11,6 +11,7 @@ import {
   trackLoginSuccess,
 } from '@/analytics/events'
 import { ApiError, errorMessageOf, isTimeout } from '@/shared/api/http'
+import { flush } from '@/analytics/logger'
 import { replaceDocument } from '@/shared/lib/documentNavigation'
 
 interface LoginFormProps {
@@ -61,7 +62,10 @@ export default function LoginForm({ nextPath, expired, from }: LoginFormProps) {
       // 여기서 처리한다. 만료 화면에 도착하기 전에 이미 문서 이동으로 메모리 상태가 초기화되므로
       // 문서 이동을 한 번 더 해도 추가로 초기화되는 상태는 없다.
       if (expired) {
-        replaceDocument(nextPath)
+        // 문서를 새로 받기 전에 큐를 비운다. 지금 프로바이더는 콘솔이라 동기지만,
+        // 실제 SDK 를 붙이면 전송이 끝나기 전에 페이지가 바뀔 수 있다.
+        // 그때 고칠 곳을 flush 안 한 군데로 모아 둔다.
+        void flush().finally(() => replaceDocument(nextPath))
         return
       }
 

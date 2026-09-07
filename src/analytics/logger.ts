@@ -49,17 +49,29 @@ export async function initAnalytics(): Promise<void> {
 
   initialized = true
 
+  await flush()
+}
+
+/**
+ * 큐에 남은 이벤트를 지금 내보낸다.
+ *
+ * 문서를 새로 받기 직전처럼 화면이 사라지는 자리에서 부른다. 지금 프로바이더는
+ * 콘솔이라 동기라서 하는 일이 없지만, 호출 지점을 정해 두면 실제 SDK 를 붙일 때
+ * 고칠 곳이 이 함수 안 한 군데로 줄어든다.
+ */
+export async function flush(): Promise<void> {
   const pending = queue
   queue = []
   pending.forEach(send)
 }
 
 export function track(event: string, properties: EventProperties = {}): void {
-  enqueueOrSend({
-    type: 'track',
-    event,
-    properties: { ...commonProperties(), ...properties },
-  })
+  // 공통 프로퍼티는 여기서 합치지 않는다. setCommonProperties 가 아직 등록되지 않은
+  // 시점에 track 이 불리면 sessionId·device·ts 가 빈 값으로 확정되기 때문이다.
+  // 등록은 화면의 effect 에서 일어나고 track 도 effect 에서 불려서, 둘의 순서는
+  // 컴포넌트 배치와 Suspense 경계에 따라 달라진다. 전송 시점에 합치면 그 순서에
+  // 기대지 않는다.
+  enqueueOrSend({ type: 'track', event, properties })
 }
 
 export function identify(userId: string, properties?: EventProperties): void {
@@ -86,7 +98,10 @@ function send(queued: QueuedEvent): void {
   providers.forEach((provider) => {
     try {
       if (queued.type === 'track') {
-        provider.track(queued.event, queued.properties)
+        provider.track(queued.event, {
+          ...commonProperties(),
+          ...queued.properties,
+        })
       } else if (queued.type === 'identify') {
         provider.identify(queued.userId, queued.properties)
       } else {
