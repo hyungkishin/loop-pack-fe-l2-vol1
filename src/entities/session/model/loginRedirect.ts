@@ -37,6 +37,11 @@ export const safeNextPath = (
   // 파싱 후에도 우리 origin이어야 한다. `//evil.example`이 여기서 걸린다.
   if (url.origin !== PROBE_ORIGIN) return fallback
 
+  // origin 검사만으로는 부족하다. `/..//evil.com`은 `..`가 앞 세그먼트를 지워서
+  // origin은 그대로인 채 pathname이 `//evil.com`으로 남는다. 그 값을 그대로 이동에
+  //쓰면 브라우저가 스킴 상대 URL로 읽어 외부로 나간다. 결과 경로도 검사한다.
+  if (url.pathname.startsWith('//')) return fallback
+
   // 로그인 화면으로 되돌아가면 로그인 성공 후 같은 화면이 다시 나온다.
   if (
     url.pathname === LOGIN_PATH ||

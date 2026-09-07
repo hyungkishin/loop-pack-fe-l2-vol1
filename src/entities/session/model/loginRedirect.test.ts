@@ -33,6 +33,14 @@ describe('safeNextPath', () => {
     expect(safeNextPath('/\\evil.example')).toBe(DEFAULT_NEXT_PATH)
   })
 
+  it('상위 경로 이동으로 //호스트를 만드는 값을 막는다', () => {
+    // `..`가 앞 세그먼트를 지워 origin 검사를 통과하고 pathname만 //evil.com이 된다.
+    // 그 값으로 이동하면 브라우저가 외부 주소로 읽는다.
+    expect(safeNextPath('/..//evil.example')).toBe(DEFAULT_NEXT_PATH)
+    expect(safeNextPath('/../..//evil.example')).toBe(DEFAULT_NEXT_PATH)
+    expect(safeNextPath('/orders/..//evil.example')).toBe(DEFAULT_NEXT_PATH)
+  })
+
   it('상대 경로는 목적지가 화면마다 달라지므로 막는다', () => {
     expect(safeNextPath('orders/new')).toBe(DEFAULT_NEXT_PATH)
   })
