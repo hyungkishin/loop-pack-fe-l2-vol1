@@ -1,6 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { resetCart } from '@/entities/cart/model/cart'
 import { resetWishlist } from '@/entities/wishlist/model/wishlist'
@@ -16,6 +17,7 @@ import { resetWishlist } from '@/entities/wishlist/model/wishlist'
 // 로그아웃처럼 보이면, 사용자는 로그아웃했다고 믿고 자리를 뜬다.
 export default function LogoutButton() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const [pending, setPending] = useState(false)
 
   const logout = async () => {
@@ -33,6 +35,11 @@ export default function LogoutButton() {
 
     resetCart()
     resetWishlist()
+    // 서버에서 받아 둔 캐시도 버린다. 남겨 두면 두 가지가 걸린다. 앞 사용자의 주문
+    // 내역이 캐시에 남고, 이동이 끝나기 전에 그 쿼리가 다시 나가면 쿠키가 이미 지워져
+    // 401 을 받는다. 그 401 은 조회라서 만료로 판정돼(app/providers.tsx) 방금 스스로
+    // 로그아웃한 사용자에게 만료 안내가 뜬다.
+    queryClient.clear()
 
     // 홈으로 보낸 뒤 서버 렌더를 다시 받는다. 보호 경로에 머문 채 새로고침하면
     // 가드가 로그인 화면으로 보내므로, 사용자가 로그아웃 직후 로그인 화면을 본다.
