@@ -14,12 +14,17 @@ test.describe('인증 흐름', () => {
     page,
     account,
   }) => {
-    await page.goto('/orders/new')
+    // 쿼리를 붙여 진입한다. proxy 는 pathname 과 search 를 함께 싣고, 페이지 가드는
+    // 자기 경로만 안다. 이 쿼리가 복원 값에 남는지가 두 경로를 가르는 지점이다.
+    // 쿼리 없이 들어가면 proxy 를 통째로 지워도 이 테스트가 통과한다.
+    await page.goto('/orders/new?size=270&color=red')
 
-    await expect(page).toHaveURL(/\/login\?next=%2Forders%2Fnew$/)
+    await expect(page).toHaveURL(
+      '/login?next=%2Forders%2Fnew%3Fsize%3D270%26color%3Dred',
+    )
     await login(page, account)
 
-    await expect(page).toHaveURL('/orders/new')
+    await expect(page).toHaveURL('/orders/new?size=270&color=red')
     const sessionCookie = (await page.context().cookies()).find(
       (cookie) => cookie.name === 'session',
     )
