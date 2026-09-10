@@ -35,6 +35,16 @@ run `34498716030` · https://github.com/hyungkishin/loop-pack-fe-l2-vol1/actions
 
 pnpm hit 3회 기준 **중앙값 112s, 범위 111~130s**.
 
+서로 다른 무해한 lockfile 주석으로 setup-node의 key를 세 번 바꿨다. 세 로그 모두 `pnpm cache is not found`를 출력하고 서로 다른 key를 저장했다. 브라우저 캐시는 세 실행 모두 적용하지 않았다.
+
+| cold 실행 | PR | install | job 전체 | Actions |
+| --- | --- | ---: | ---: | --- |
+| 1 | [#6](https://github.com/hyungkishin/loop-pack-fe-l2-vol1/pull/6) | 4.9s | 107s | [run 34541863877](https://github.com/hyungkishin/loop-pack-fe-l2-vol1/actions/runs/34541863877) |
+| 2 | [#8](https://github.com/hyungkishin/loop-pack-fe-l2-vol1/pull/8) | 6.0s | 115s | [run 34541865636](https://github.com/hyungkishin/loop-pack-fe-l2-vol1/actions/runs/34541865636) |
+| 3 | [#7](https://github.com/hyungkishin/loop-pack-fe-l2-vol1/pull/7) | 6.1s | 103s | [run 34541866613](https://github.com/hyungkishin/loop-pack-fe-l2-vol1/actions/runs/34541866613) |
+
+cold 중앙값은 **107s, 범위 103~115s**다. install 중앙값은 6.0s로 warm의 2s보다 4s 길지만 job 전체는 runner 변동에 묻혀 cold가 더 느리다고 볼 수 없다. 캐시 hit은 의존성 설치 구간을 줄인다는 범위까지만 증명한다.
+
 | 스텝 | R1 | R2 | R3 | 중앙값 |
 | --- | ---: | ---: | ---: | ---: |
 | Install dependencies | 2 | 2 | 2 | 2 (miss일 때 7) |
@@ -152,7 +162,9 @@ after    FFmpeg (playwright ffmpeg v1011)
 
 현재 3회는 두 라우트 모두 편차가 0 B다. 8·9주차 인증·주문·계측 이후 홈은 10,701 B, 상품 목록은 11,026 B 늘었다. 현재값에서 약 5%를 허용해 홈 618 KiB, 상품 목록 635 KiB를 예산으로 둔다. 5%는 현재 기능 추가 한 번 정도의 증가를 허용하면서, 30 KiB가 넘는 신규 의존성이나 공통 청크 증가는 검토 대상으로 돌리는 경계다.
 
-`pnpm size:check`는 build 뒤에 실행한다. 라우트, 현재값, 예산, 차이와 결과를 `$GITHUB_STEP_SUMMARY`에 쓴다. 700,000 B fixture를 넣은 자가 검증에서는 홈이 683.6 KiB, 예산이 618.0 KiB, 초과량이 65.6 KiB라고 표시하고 종료 코드 1을 반환했다.
+`pnpm size:check`는 build 뒤에 실행한다. 라우트, 현재값, 예산, 차이와 결과를 `$GITHUB_STEP_SUMMARY`에 쓴다. 700,000 B fixture를 넣은 로컬 자가 검증에서는 홈이 683.6 KiB, 예산이 618.0 KiB, 초과량이 65.6 KiB라고 표시하고 종료 코드 1을 반환했다.
+
+원격 측정 PR [#5](https://github.com/hyungkishin/loop-pack-fe-l2-vol1/pull/5)에서는 홈 예산만 500 KiB로 낮추고 이에 맞춘 단위 테스트를 먼저 통과시켰다. [run 34541923894](https://github.com/hyungkishin/loop-pack-fe-l2-vol1/actions/runs/34541923894)는 production build 뒤 `Check bundle budget`에서 실패했다. 출력과 summary에는 현재 588.4 KiB, 예산 500.0 KiB, 초과 88.4 KiB가 표시됐다. 첫 시도는 fixture의 고정 기대값이 먼저 실패해 게이트 증거로 사용하지 않았다.
 
 이 스크립트는 Next 16.2.10의 진단 파일 계약에 의존한다. 파일이나 필수 라우트가 없으면 통과시키지 않고 실패한다. Next를 올릴 때 진단 파일 구조와 측정 단위를 함께 재검토한다.
 
