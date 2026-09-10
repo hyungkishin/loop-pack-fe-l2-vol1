@@ -74,7 +74,7 @@ describe('라우트 번들 예산', () => {
 
       assert.equal(result.status, 1)
       assert.match(result.stderr, /\/ 683\.6 KiB/)
-      assert.match(result.stderr, /65\.6 KiB 초과/)
+      assert.match(result.stderr, /183\.6 KiB 초과/)
     } finally {
       rmSync(fixtureDir, { recursive: true, force: true })
     }
