@@ -25,6 +25,12 @@ const rawAnalyticsImportRestriction = {
     '화면에서는 원시 계측 함수를 호출하지 않는다. src/analytics/events.ts의 타입 wrapper를 사용한다.',
 }
 
+const rawAnalyticsDynamicImportRestriction = {
+  selector: 'ImportExpression[source.value=/analytics\\/logger(\\.[^/]+)?$/]',
+  message:
+    '화면에서는 analytics logger를 동적으로 가져오지 않는다. src/analytics/events.ts의 타입 wrapper를 정적으로 사용한다.',
+}
+
 export default defineConfig(
   {
     ignores: [
@@ -134,6 +140,7 @@ export default defineConfig(
         'error',
         { patterns: [rawAnalyticsImportRestriction] },
       ],
+      'no-restricted-syntax': ['error', rawAnalyticsDynamicImportRestriction],
     },
   },
 
