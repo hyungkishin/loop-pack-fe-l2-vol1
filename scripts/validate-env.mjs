@@ -58,7 +58,12 @@ const appendSummary = (errors) => {
   const result = errors.length === 0 ? '통과' : '실패'
   const details =
     errors.length === 0
-      ? '| APP_ORIGIN | 절대 http(s) URL | 통과 |\n| 공개 비밀 변수 | 없음 | 통과 |'
+      ? [
+          '| 항목 | 기준 | 결과 |',
+          '| --- | --- | --- |',
+          '| APP_ORIGIN | 절대 http(s) URL | 통과 |',
+          '| 공개 비밀 변수 | 없음 | 통과 |',
+        ].join('\n')
       : errors.map((error) => `- ${error}`).join('\n')
 
   appendFileSync(

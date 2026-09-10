@@ -68,10 +68,16 @@ describe('환경 변수 검증', () => {
         'utf8',
       )
 
+      const childEnvironment = {
+        ...process.env,
+        APP_ORIGIN: 'https://example.com',
+      }
+      delete childEnvironment.GITHUB_STEP_SUMMARY
+
       const result = spawnSync(process.execPath, [validatorPath], {
         cwd: projectDir,
         encoding: 'utf8',
-        env: { ...process.env, APP_ORIGIN: 'https://example.com' },
+        env: childEnvironment,
       })
 
       assert.equal(result.status, 1)
