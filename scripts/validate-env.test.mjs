@@ -1,10 +1,19 @@
 import assert from 'node:assert/strict'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { spawnSync } from 'node:child_process'
 import { describe, it } from 'node:test'
+import { fileURLToPath } from 'node:url'
 import {
   findPublicSecretNames,
   validateAppOrigin,
   validateEnvironment,
 } from './validate-env.mjs'
+
+const validatorPath = fileURLToPath(
+  new URL('./validate-env.mjs', import.meta.url),
+)
 
 describe('환경 변수 검증', () => {
   it('APP_ORIGIN이 없으면 실패한다', () => {
@@ -46,5 +55,33 @@ describe('환경 변수 검증', () => {
 
     assert.equal(errors.length, 2)
     assert.doesNotMatch(errors.join(' '), /do-not-print/)
+  })
+
+  it('.env.production의 공개 비밀 변수도 값 노출 없이 거부한다', () => {
+    const projectDir = mkdtempSync(join(tmpdir(), 'week10-env-'))
+    const secretValue = 'must-not-appear-in-output'
+
+    try {
+      writeFileSync(
+        join(projectDir, '.env.production'),
+        `NEXT_PUBLIC_AUTH_TOKEN=${secretValue}\n`,
+        'utf8',
+      )
+
+      const result = spawnSync(process.execPath, [validatorPath], {
+        cwd: projectDir,
+        encoding: 'utf8',
+        env: { ...process.env, APP_ORIGIN: 'https://example.com' },
+      })
+
+      assert.equal(result.status, 1)
+      assert.match(result.stderr, /NEXT_PUBLIC_AUTH_TOKEN/)
+      assert.doesNotMatch(
+        `${result.stdout}${result.stderr}`,
+        new RegExp(secretValue),
+      )
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true })
+    }
   })
 })

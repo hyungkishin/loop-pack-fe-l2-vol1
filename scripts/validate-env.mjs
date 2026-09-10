@@ -1,5 +1,8 @@
 import { appendFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
+import nextEnv from '@next/env'
+
+const { loadEnvConfig } = nextEnv
 
 const PUBLIC_PREFIX = 'NEXT_PUBLIC_'
 const SECRET_NAME = /(SECRET|TOKEN|PASSWORD|PRIVATE|API_KEY|ACCESS_KEY)/i
@@ -66,6 +69,9 @@ const appendSummary = (errors) => {
 }
 
 const run = () => {
+  // next build와 같은 production 환경 파일을 먼저 읽는다. process.env만 보면
+  // .env.production.local에 들어간 NEXT_PUBLIC_* 비밀 변수를 놓친다.
+  loadEnvConfig(process.cwd(), false)
   const errors = validateEnvironment(process.env)
   appendSummary(errors)
 
