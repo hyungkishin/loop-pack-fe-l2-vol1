@@ -14,7 +14,12 @@ import next from '@next/eslint-plugin-next'
 import prettier from 'eslint-config-prettier'
 
 const rawAnalyticsImportRestriction = {
-  group: ['@/analytics/logger', '**/analytics/logger'],
+  group: [
+    '@/analytics/logger',
+    '@/analytics/logger.*',
+    '**/analytics/logger',
+    '**/analytics/logger.*',
+  ],
   importNames: ['track', 'identify', 'reset'],
   message:
     '화면에서는 원시 계측 함수를 호출하지 않는다. src/analytics/events.ts의 타입 wrapper를 사용한다.',
