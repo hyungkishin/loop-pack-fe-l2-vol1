@@ -71,8 +71,12 @@ jobs:
         run: pnpm env:test
       - name: Validate environment
         run: pnpm env:check
+      - name: Test bundle budget
+        run: pnpm size:test
       - name: Build
         run: pnpm build
+      - name: Check bundle budget
+        run: pnpm size:check
       - name: Build Storybook
         run: pnpm build:storybook
 
