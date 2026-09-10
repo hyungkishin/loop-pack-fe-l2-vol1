@@ -32,6 +32,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          # PR의 base...head 경로를 직접 비교한다. 외부 changed-files 액션과
+          # pull-requests: read 권한을 추가하지 않아도 된다.
+          fetch-depth: 0
           persist-credentials: false
       - name: Set up pnpm
         uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
@@ -68,5 +71,48 @@ jobs:
         run: pnpm build
       - name: Build Storybook
         run: pnpm build:storybook
+
+      - name: Decide whether E2E is required
+        id: e2e-changes
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [[ "$EVENT_NAME" != "pull_request" ]]; then
+            echo "run_e2e=true" >> "$GITHUB_OUTPUT"
+            echo "E2E: pull_request가 아니므로 실행" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if git diff --quiet "$BASE_SHA...$HEAD_SHA" -- \
+            'src/**' \
+            'public/**' \
+            'e2e/**' \
+            'scripts/**' \
+            '.github/workflows/**' \
+            'package.json' \
+            'pnpm-lock.yaml' \
+            'playwright.config.ts' \
+            'next.config.ts' \
+            'tsconfig.json' \
+            'vitest.config.ts'; then
+            echo "run_e2e=false" >> "$GITHUB_OUTPUT"
+            echo "E2E: 문서 등 런타임과 무관한 변경만 있어 생략" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "run_e2e=true" >> "$GITHUB_OUTPUT"
+            echo "E2E: 실행 경로 변경을 감지해 실행" >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: E2E
+        id: e2e
+        if: steps.e2e-changes.outputs.run_e2e == 'true'
         run: pnpm test:e2e:prebuilt
+      - name: Upload E2E failure artifacts
+        if: failure() && steps.e2e.outcome == 'failure'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: playwright-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/
+          if-no-files-found: error
+          retention-days: 7
