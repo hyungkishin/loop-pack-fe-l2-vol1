@@ -99,13 +99,15 @@ jobs:
             'public/**' \
             'e2e/**' \
             'scripts/**' \
+            '.storybook/**' \
             '.github/workflows/**' \
+            '.env*' \
+            '.nvmrc' \
+            'pnpm-workspace.yaml' \
             'package.json' \
             'pnpm-lock.yaml' \
-            'playwright.config.ts' \
-            'next.config.ts' \
-            'tsconfig.json' \
-            'vitest.config.ts'; then
+            '*.config.*' \
+            'tsconfig*.json'; then
             echo "run_e2e=false" >> "$GITHUB_OUTPUT"
             echo "E2E: 문서 등 런타임과 무관한 변경만 있어 생략" >> "$GITHUB_STEP_SUMMARY"
           else
