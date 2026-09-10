@@ -7,7 +7,7 @@ const KIB = 1024
 // 라우트별 firstLoadUncompressedJsBytes를 사용한다. Lighthouse의 네트워크
 // transferSize와 단위가 다르므로 두 값을 직접 비교하지 않는다.
 export const ROUTE_BUDGETS = {
-  '/': 618 * KIB,
+  '/': 500 * KIB,
   '/products': 635 * KIB,
 }
 
