@@ -5,13 +5,21 @@ name: Quality
     branches:
       - main
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      APP_ORIGIN: http://127.0.0.1:3000
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -28,14 +36,12 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Install Playwright Chromium when used
-        run: |
-          if pnpm exec playwright --version >/dev/null 2>&1; then
-            pnpm exec playwright install --with-deps chromium
-          fi
+      - name: Install Playwright system deps
+        run: pnpm exec playwright install-deps chromium
+      - name: Download Playwright Chromium
+        run: pnpm exec playwright install chromium
+
+      # 측정 전용 구성이다. 검증 집합은 현재 workflow와 같고 스텝 경계만 하나로 되돌린다.
+      # 스텝을 나눈 것 자체가 wall-clock을 늘렸는지 분리해 재기 위한 Before다.
       - name: Run quality checks
-        # 배포 URL 증거가 아니라 build 계약을 검증하는 값이다.
-        # 서버 metadata와 prefetch가 절대 URL을 만들려면 build 시점에 origin이 있어야 한다.
-        env:
-          APP_ORIGIN: http://127.0.0.1:3000
         run: pnpm check
