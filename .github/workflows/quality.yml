@@ -24,7 +24,7 @@ jobs:
     timeout-minutes: 15
     # 배포 URL 증거가 아니라 build 계약을 검증하는 값이다.
     # 서버 metadata와 prefetch가 절대 URL을 만들려면 build 시점에 origin이 있어야 한다.
-    # 이전 검증 체인 전체에 적용되던 값을 분리된 여덟 검증에도 동일하게 적용한다.
+    # 이전 검증 체인 전체에 적용되던 값을 분리된 각 검증에도 동일하게 적용한다.
     # 설치 단계에서도 보이지만 해당 명령은 이 값을 사용하지 않는다.
     env:
       APP_ORIGIN: http://127.0.0.1:3000
@@ -55,7 +55,7 @@ jobs:
       - name: Download Playwright Chromium
         run: pnpm exec playwright install chromium
 
-      # 아래 여덟 개는 `pnpm check` 가 && 로 잇던 것과 같은 명령을 같은 순서로 실행한다.
+      # 아래 스텝들은 `pnpm check` 가 && 로 잇던 것과 같은 명령을 같은 순서로 실행한다.
       # 하나로 묶여 있으면 로그에 총 시간만 남아 어느 검증이 느린지 지목할 수 없다.
       - name: Architecture check
         run: pnpm architecture:check
@@ -63,6 +63,11 @@ jobs:
         run: pnpm test
       - name: Storybook tests
         run: pnpm test:storybook
+      # `env:test`-`env:check`, `size:test`-`size:check`와 같은 배치다.
+      # 게이트를 돌리기 전에 게이트 자체의 계약을 먼저 고정한다.
+      # 승격한 계측 룰은 패턴 문자열 하나만 빠져도 다시 통과하고, lint 결과는 성공으로 남는다.
+      - name: Test promoted lint rule
+        run: pnpm lint:rule:test
       - name: Lint
         run: pnpm lint
       - name: Typecheck
