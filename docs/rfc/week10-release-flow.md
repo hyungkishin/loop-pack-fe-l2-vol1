@@ -44,10 +44,10 @@ Preview는 Production DB, 결제 API와 이벤트 데이터셋을 공유하지 �
 
 | 환경 | URL | deployment ID | smoke |
 | --- | --- | --- | --- |
-| Preview | https://loop-commerce-week10-3f4mwshjx-cashnamu.vercel.app | `dpl_5xuq84LYNGqFR1uBEDe9EEKtZcdC` | 3개 통과, 3.8s |
-| Production | https://loop-commerce-week10.vercel.app | `dpl_4UNhfVBKoC12zhamszovniCGKpJJ` | 3개 통과, 4.7s |
+| Preview | https://loop-commerce-week10-g1h352o90-cashnamu.vercel.app | `dpl_FWXqRGm54qsLN7oaKD3J2WrbcuDc` | 3개 통과, 3.1s |
+| Production | https://loop-commerce-week10.vercel.app | `dpl_C5RBRoA1ZQeSxJnquWYratxckUJ2` | 3개 통과, 3.4s |
 
-두 deployment의 build log에서 pnpm 10.15.1, Next 16.2.10, route 13개와 성공 상태를 확인했다. 첫 배포라 Preview 후보가 Production으로 지정됐고, 같은 소스를 다시 배포해 별도 Preview URL을 확보했다.
+두 deployment는 애플리케이션 변경 SHA `c2c7c456`을 사용한다. build log에서 환경 검증, pnpm 10.15.1, Next 16.2.10, route 13개와 성공 상태를 확인했다. 첫 배포라 Preview 후보가 Production으로 지정됐고, 같은 소스를 다시 배포해 별도 Preview URL을 확보했다.
 
 ## 4. 실패 위치와 복구
 
@@ -71,6 +71,8 @@ DEPLOYMENT_URL=https://production.example.com pnpm test:smoke
 `quality`와 번들 byte 예산은 결정적이므로 required 후보다. 배포 smoke도 URL이 확보된 이후 Preview와 Production 승격 조건으로 사용한다. Lighthouse 단일 점수, Sentry 오류 부재, 이벤트 funnel의 타당성은 실행 환경과 트래픽에 따라 달라지므로 사람이 범위와 추세를 판단한다.
 
 현재 upstream 저장소의 branch protection을 변경할 관리자 권한이 없다. 따라서 `quality`를 required로 둘 정책은 정했지만 설정 완료라고 쓰지 않는다.
+
+실제 실패 deployment `dpl_AjanvCN4sj5XsEQm3B7R25P4fctq`는 `APP_ORIGIN`이 Vercel Production 환경에 저장되지 않아 `pnpm env:check`에서 build 전에 중단됐다. 프로젝트의 Preview·Production 환경에 고정 origin을 등록한 뒤 `dpl_C5RBRoA1ZQeSxJnquWYratxckUJ2`가 통과했다.
 
 ### Preview 보호 정책
 

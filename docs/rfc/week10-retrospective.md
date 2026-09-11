@@ -36,7 +36,7 @@
 
 CI는 같은 명령을 반복하는 장치에서 실패 귀속을 남기는 장치로 바뀌었다. commit SHA, run URL, cache 상태와 step 시간을 함께 기록한다. `concurrency`는 PR의 이전 실행만 취소하고 main push와 수동 측정은 취소하지 않는다. workflow 권한은 `contents: read`로 제한했다.
 
-Vercel Production(`loop-commerce-week10.vercel.app`)과 별도 Preview URL을 만들었다. 두 환경에서 홈, 상품 목록, 로그인 계약으로 제한한 smoke 3개가 각각 4.7초와 3.8초에 통과했다. Preview의 첫 실행은 Vercel 로그인 화면으로 이동해 실패했다. 이 프로젝트는 mock 데이터만 제공하므로 Preview 보호를 해제했고, 앱의 요소 계약까지 다시 통과한 뒤 배포 성공으로 판정했다.
+Vercel Production(`loop-commerce-week10.vercel.app`)과 별도 Preview URL을 만들었다. 두 환경에서 홈, 상품 목록, 로그인 계약으로 제한한 smoke 3개가 각각 3.4초와 3.1초에 통과했다. Preview의 첫 실행은 Vercel 로그인 화면으로 이동해 실패했다. 이 프로젝트는 mock 데이터만 제공하므로 Preview 보호를 해제했고, 앱의 요소 계약까지 다시 통과한 뒤 배포 성공으로 판정했다. Production 승격 첫 시도는 `APP_ORIGIN` 누락을 build 전에 검출했고, 환경별 설정을 저장한 다음 재배포해 통과했다.
 
 Docker는 `.nvmrc`와 같은 Node 24.17.0, pnpm 10.15.1에서 환경 검증과 production build를 실행한다. 89,020,786B의 standalone runner는 비 root `nextjs` 사용자가 `node server.js`를 실행한다. 컨테이너 URL에서 같은 smoke 3개가 1.5초에 통과했다. Vercel은 현재 운영 선택이고 Docker는 컨테이너 표준이나 VPC 제약이 생길 때 사용할 이식 경계로 남긴다.
 
