@@ -78,6 +78,8 @@ jobs:
         run: pnpm env:check
       - name: Test bundle budget
         run: pnpm size:test
+      - name: Test E2E decision
+        run: pnpm ci:test
       - name: Build
         run: pnpm build
       - name: Check bundle budget
@@ -85,40 +87,16 @@ jobs:
       - name: Build Storybook
         run: pnpm build:storybook
 
+      # 판정을 YAML 밖으로 뺀다. 앞 구현은 30줄 인라인 bash라 테스트가 없었고,
+      # 그래서 허용 목록이 fail-open이라는 것을 아무도 잡지 못했다.
+      # 지금은 무해 목록에만 해당할 때 생략하고 모르는 경로는 실행한다.
       - name: Decide whether E2E is required
         id: e2e-changes
-        shell: bash
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          if [[ "$EVENT_NAME" != "pull_request" ]]; then
-            echo "run_e2e=true" >> "$GITHUB_OUTPUT"
-            echo "E2E: pull_request가 아니므로 실행" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
-          if git diff --quiet "$BASE_SHA...$HEAD_SHA" -- \
-            'src/**' \
-            'public/**' \
-            'e2e/**' \
-            'scripts/**' \
-            '.storybook/**' \
-            '.github/workflows/**' \
-            '.env*' \
-            '.nvmrc' \
-            'pnpm-workspace.yaml' \
-            'package.json' \
-            'pnpm-lock.yaml' \
-            '*.config.*' \
-            'tsconfig*.json'; then
-            echo "run_e2e=false" >> "$GITHUB_OUTPUT"
-            echo "E2E: 문서 등 런타임과 무관한 변경만 있어 생략" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "run_e2e=true" >> "$GITHUB_OUTPUT"
-            echo "E2E: 실행 경로 변경을 감지해 실행" >> "$GITHUB_STEP_SUMMARY"
-          fi
+        run: >-
+          node scripts/ci/decide-e2e.mjs
+          --event "${{ github.event_name }}"
+          --base "${{ github.event.pull_request.base.sha }}"
+          --head "${{ github.event.pull_request.head.sha }}"
       - name: E2E
         id: e2e
         if: steps.e2e-changes.outputs.run_e2e == 'true'
