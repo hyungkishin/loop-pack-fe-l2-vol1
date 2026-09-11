@@ -198,6 +198,19 @@ after    FFmpeg (playwright ffmpeg v1011)
 
 자가 검증은 누락, 상대 URL, ftp URL, 공개 비밀 변수와 `.env.production` 입력을 모두 실패시켰다. 성공·실패 결과는 build 전에 summary에 남는다.
 
+### 게이트를 우회하던 build 기본값
+
+`appOrigin.ts`는 "기본값은 두지 않는다. 조용한 localhost 기본값이 불일치를 숨기고 결과물에 굳는다"를 주석으로 명시하고 있었다. 그런데 `Dockerfile`의 builder 단계가 `ARG APP_ORIGIN=http://127.0.0.1:3000`으로 그 기본값을 채워 넣었다. `--build-arg` 없이 빌드해도 `env:check`가 그 값으로 통과했고, runner 단계에는 값이 아예 없어 `-e` 없이 실행하면 요청마다 `getAppOrigin`이 던졌다. **게이트가 막으려던 설정 사고가 게이트 안쪽에 있었다.**
+
+기본값을 없애고 runner에도 같은 값을 굽는다.
+
+| 실행 | 결과 |
+| --- | --- |
+| `docker build` (인자 없음) | builder 단계 0.4초에 `APP_ORIGIN이 없습니다`로 실패 |
+| `docker build --build-arg APP_ORIGIN=http://127.0.0.1:3100` | 성공, 이미지 `Config.Env`에 `APP_ORIGIN=http://127.0.0.1:3100` |
+| 컨테이너 3100 포트에 smoke 3개 | 1.4초에 3개 통과 |
+
+`docker run -e APP_ORIGIN=...`으로 덮어쓸 수 있다. build와 runtime 값이 같아야 하는 제약은 그대로다.
 
 ## G. 품질 게이트
 
