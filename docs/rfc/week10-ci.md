@@ -242,3 +242,5 @@ secrets를 쓰는 workflow는 `deployment-smoke` 하나다. `deployment_status`�
 ### AI가 만든 workflow를 그대로 merge하면 어떤 위험이 있을까?
 
 이번 초안은 176초를 브라우저 다운로드로 잘못 귀속해 효과 없는 캐시를 제안했다. 이후 리뷰에서는 `.env` 미검사, 확장자·동적 import 우회와 경로 필터 누락을 찾았다. AI 출력은 가설과 후보로 받고 실제 diff, 공식 계약, 실패 주입과 Actions 로그로 확인한 뒤 채택한다.
+
+<!-- protection 검증용 문서 변경. 런타임에 닿지 않는다. -->
