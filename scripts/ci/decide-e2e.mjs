@@ -99,16 +99,42 @@ const writeOutput = (decision) => {
   }
 }
 
-const run = (argv) => {
-  const event = argValue(argv, '--event')
-
-  // pull_request가 아니면 비교할 base가 없다. main push와 수동 실행은 항상 실행한다.
+export const decideForEvent = ({ event, draft, changedPaths }) => {
+  // pull_request가 아니면 비교할 base가 없다. main push, merge_group, 수동 실행은
+  // 조건 없이 전체를 돈다. merge_group이 조건부 스킵의 최종 방어선이다.
   if (event !== 'pull_request') {
-    writeOutput({
+    return {
       run: true,
       reason: `${event ?? '알 수 없는'} 이벤트는 조건 없이 실행한다`,
       deciding: [],
-    })
+    }
+  }
+
+  // draft는 작성 중이라는 신호다. 여기서 아끼는 대신 merge_group에서 한 번 더 돈다.
+  // 그래서 이 생략은 깨진 코드가 main에 들어가는 경로를 열지 않는다.
+  if (draft === true) {
+    return {
+      run: false,
+      reason: 'draft PR이라 생략한다. merge_group에서 전체를 돈다',
+      deciding: [],
+    }
+  }
+
+  return decideE2e(changedPaths)
+}
+
+const run = (argv) => {
+  const event = argValue(argv, '--event')
+
+  if (event !== 'pull_request') {
+    writeOutput(decideForEvent({ event, draft: false, changedPaths: [] }))
+    return
+  }
+
+  const draft = argValue(argv, '--draft') === 'true'
+
+  if (draft) {
+    writeOutput(decideForEvent({ event, draft, changedPaths: [] }))
     return
   }
 
@@ -124,7 +150,13 @@ const run = (argv) => {
     return
   }
 
-  writeOutput(decideE2e(changedPathsBetween(base, head)))
+  writeOutput(
+    decideForEvent({
+      event,
+      draft,
+      changedPaths: changedPathsBetween(base, head),
+    }),
+  )
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {

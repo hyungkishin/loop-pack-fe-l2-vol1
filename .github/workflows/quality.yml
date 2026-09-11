@@ -5,6 +5,12 @@ name: Quality
     branches:
       - main
   pull_request:
+    # ready_for_review가 없으면 draft를 푼 순간 재실행이 걸리지 않는다.
+    # draft에서 E2E를 아끼는 판단과 짝이다.
+    types: [opened, synchronize, reopened, ready_for_review]
+  # 조건부 스킵의 최종 방어선이다. PR에서 생략한 검증을 main에 들어가기 직전에 한 번
+  # 더 돈다. 이 트리거가 없으면 스킵을 되짚는 지점이 어디에도 없다.
+  merge_group:
   # 같은 조건에서 반복 측정하려고 연다. PR을 새로 만들지 않고 실행 시간을 잴 수 있다.
   workflow_dispatch:
 
@@ -143,6 +149,7 @@ jobs:
         run: >-
           node scripts/ci/decide-e2e.mjs
           --event "${{ github.event_name }}"
+          --draft "${{ github.event.pull_request.draft }}"
           --base "${{ github.event.pull_request.base.sha }}"
           --head "${{ github.event.pull_request.head.sha }}"
       - name: E2E
