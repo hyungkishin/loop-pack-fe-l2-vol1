@@ -70,6 +70,12 @@ jobs:
         run: pnpm lint:rule:test
       - name: Lint
         run: pnpm lint
+      # 문체 규칙도 같은 배치다. 목록에 있는 표현만 판정하고 나머지는 사람이 본다.
+      # runner 이미지의 python3을 쓴다. 별도 setup 액션을 추가하지 않는다.
+      - name: Test comment style gate
+        run: pnpm style:test
+      - name: Check comment style
+        run: pnpm style:check
       - name: Typecheck
         run: pnpm typecheck
       - name: Test environment validation
