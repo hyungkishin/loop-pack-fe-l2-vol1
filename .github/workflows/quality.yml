@@ -5,13 +5,22 @@ name: Quality
     branches:
       - main
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  quality:
+  # 브라우저도 .next도 필요 없는 검증이다. 앞의 단일 job에서는 build·E2E 뒤에
+  # 직렬로 붙어 있었지만 서로 의존하지 않아 따로 돌 수 있다.
+  # 이 job은 Playwright 설치 27초를 아예 치르지 않는다.
+  static:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -28,14 +37,103 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Install Playwright Chromium when used
-        run: |
-          if pnpm exec playwright --version >/dev/null 2>&1; then
-            pnpm exec playwright install --with-deps chromium
-          fi
-      - name: Run quality checks
-        # 배포 URL 증거가 아니라 build 계약을 검증하는 값이다.
-        # 서버 metadata와 prefetch가 절대 URL을 만들려면 build 시점에 origin이 있어야 한다.
+      - name: Architecture check
+        run: pnpm architecture:check
+      - name: Unit and DOM tests
+        run: pnpm test
+      - name: Test promoted lint rule
+        run: pnpm lint:rule:test
+      - name: Lint
+        run: pnpm lint
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Test environment validation
+        run: pnpm env:test
+      - name: Test bundle budget
+        run: pnpm size:test
+
+  # 브라우저와 production build가 필요한 검증만 남긴다. Storybook 테스트는 chromium을,
+  # 번들 예산과 E2E는 같은 job의 .next를 쓰기 때문에 여기서 갈라지지 않는다.
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      APP_ORIGIN: http://127.0.0.1:3000
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 10.15.1
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright system deps
+        run: pnpm exec playwright install-deps chromium
+      - name: Download Playwright Chromium
+        run: pnpm exec playwright install chromium
+      - name: Storybook tests
+        run: pnpm test:storybook
+      - name: Validate environment
+        run: pnpm env:check
+      - name: Build
+        run: pnpm build
+      - name: Check bundle budget
+        run: pnpm size:check
+      - name: Build Storybook
+        run: pnpm build:storybook
+
+      - name: Decide whether E2E is required
+        id: e2e-changes
+        shell: bash
         env:
-          APP_ORIGIN: http://127.0.0.1:3000
-        run: pnpm check
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [[ "$EVENT_NAME" != "pull_request" ]]; then
+            echo "run_e2e=true" >> "$GITHUB_OUTPUT"
+            echo "E2E: pull_request가 아니므로 실행" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if git diff --quiet "$BASE_SHA...$HEAD_SHA" -- \
+            'src/**' \
+            'public/**' \
+            'e2e/**' \
+            'scripts/**' \
+            '.storybook/**' \
+            '.github/workflows/**' \
+            '.env*' \
+            '.nvmrc' \
+            'pnpm-workspace.yaml' \
+            'package.json' \
+            'pnpm-lock.yaml' \
+            '*.config.*' \
+            'tsconfig*.json'; then
+            echo "run_e2e=false" >> "$GITHUB_OUTPUT"
+            echo "E2E: 문서 등 런타임과 무관한 변경만 있어 생략" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "run_e2e=true" >> "$GITHUB_OUTPUT"
+            echo "E2E: 실행 경로 변경을 감지해 실행" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: E2E
+        id: e2e
+        if: steps.e2e-changes.outputs.run_e2e == 'true'
+        run: pnpm test:e2e:prebuilt
+      - name: Upload E2E failure artifacts
+        if: failure() && steps.e2e.outcome == 'failure'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: playwright-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/
+          if-no-files-found: error
+          retention-days: 7
