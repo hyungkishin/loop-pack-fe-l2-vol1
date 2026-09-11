@@ -2,7 +2,7 @@
 
 ## 1. 프로젝트 요약
 
-상품 탐색, 장바구니·위시리스트, 로그인과 주문 흐름을 가진 Next.js 애플리케이션이다. 결과물보다 경계를 검증하는 방식이 10주 동안 바뀌었다. 현재 CI는 architecture, 단위·DOM 375개, Storybook 18개, lint, typecheck, 환경 변수, production build, 번들 예산과 조건부 E2E 12개를 한 `quality` 상태로 보고한다.
+상품 탐색, 장바구니·위시리스트, 로그인과 주문 흐름을 가진 Next.js 애플리케이션이다. 결과물보다 경계를 검증하는 방식이 10주 동안 바뀌었다. 현재 CI는 architecture, 단위·DOM 375개, Storybook 18개, lint, 주석 문체, 커밋 메시지, CI 구성, typecheck, 환경 변수, production build, 번들 예산과 조건부 E2E 12개를 `static`과 `runtime` 두 상태로 보고한다. 게이트마다 그 게이트 자신을 검증하는 테스트가 먼저 돈다.
 
 ## 2. 구조 변화
 
@@ -22,15 +22,21 @@
 
 8주차에는 순수 로직, DOM, 네트워크 경계와 production browser를 분리했다. 9주차에는 12개 E2E를 workers 1과 4에서 실행하고 신규 인증·주문 6개를 3회 반복했다. 결함 주입 7건 중 최초에 살아남은 cookie `httpOnly`, 보호 링크 prefetch와 서버 초기 HTML 공백은 단언을 보완한 뒤 다시 검출했다.
 
-10주차에는 `pnpm check` 한 줄을 named step으로 나눴다. warm 3회의 job 중앙값은 112초, 범위는 111~130초였다. Playwright 176초가 browser download라는 초안은 재현되지 않았다. 실제 중앙값은 system deps 14초, download 11초였다.
+10주차에는 `pnpm check` 한 줄을 named step으로 나눴다. Playwright 176초가 browser download라는 초안은 재현되지 않았다. 실제 중앙값은 system deps 14초, download 11초였다.
 
-모든 PR에서 architecture, test, lint, type, environment, build와 bundle을 실행한다. E2E는 실행 경로가 바뀐 PR과 push에서만 실행한다. 소스 PR [#3](https://github.com/hyungkishin/loop-pack-fe-l2-vol1/pull/3)은 E2E를 실행했고 문서 PR [#4](https://github.com/hyungkishin/loop-pack-fe-l2-vol1/pull/4)은 E2E를 생략하면서 둘 다 `quality` 상태를 보고했다.
+측정 PR 세 개로 warm 3회씩 재고 두 가지를 얻었다. 검증을 `static`과 `runtime` 두 job으로 나눈 임계경로 중앙값은 86초(83~94)로 단일 job 119초(106~130)보다 낮고 두 범위가 겹치지 않는다. 총 runner 시간은 137초로 늘었다 — 사람이 기다리는 33초를 compute 18초와 바꿨다. 같은 측정에서 스텝 12개 분리가 한 줄 구성보다 16초 느리다는 것도 나왔다. 관측 능력의 값이 그 16초다.
+
+게이트는 여덟 개이고 각각 자기 테스트를 먼저 돈다. 게이트가 회귀하면 본 게이트는 성공으로 남기 때문이다. 10주간 사람이 눈으로 막던 것 중 넷을 이번에 기계로 내렸다 — 화면의 원시 계측 import, 커밋의 AI 서명, 주석의 의인화와 영어식 직역, CI 구성의 보안과 계약이다.
+
+E2E 판정은 허용 목록에서 거부 목록으로 뒤집었다. 앞 판정은 루트의 `instrumentation.ts`, `middleware.ts`, `proxy.ts`를 모두 생략으로 분류했다. 셋 다 Next 런타임이 읽는 파일이다. 이제 무해 목록에만 해당할 때 생략하고, 생략한 것은 `merge_group`이 병합 직전에 다시 돈다. required로 건 `static`과 `runtime`은 포크 보호 브랜치에서 문서만 바꾼 PR이 `mergeStateStatus=CLEAN`이 되는 것까지 확인했다.
 
 ## 5. 성능 개선 결과
 
 7주차 홈 LCP 중앙값은 42,175ms에서 3,384ms로 줄었다. 범위는 각각 42,169~42,184ms와 3,264~3,387ms였다. 감으로 preload를 붙이지 않고 요청 시각과 hero geometry를 분리해 이미지 후보와 폰트 burst를 측정했다.
 
-10주차 번들 예산은 Lighthouse 전송량과 다른 값을 섞지 않았다. 같은 Next 16.2.10 build의 최초 로드 비압축 JS를 다시 측정했다. 현재 3회 값은 홈 602,487B, 상품 목록 619,069B로 편차가 0B였다. 현재값보다 약 5% 높은 618KiB와 635KiB를 merge 차단선으로 둔다.
+10주차 번들 예산은 Lighthouse 전송량과 다른 값을 섞지 않았다. 같은 Next 16.2.10 build의 최초 로드 비압축 JS를 다시 측정했다. 현재 3회 값은 홈 602,487B, 상품 목록 619,069B로 편차가 0B였다. 현재값보다 약 5% 높은 618KiB와 635KiB를 merge 차단선으로 둔다. 제품 화면 다섯 개 모두 같은 정책으로 예산을 두고, 예산표에 없는 라우트는 실패시킨다 — 라우트를 새로 만드는 것만으로 게이트를 빠져나가던 구멍이었다.
+
+예산은 상한만 보므로 기준선 파일을 함께 둔다. 예산 안에서 조금씩 차오르는 증가도 같은 PR의 diff로 올라온다.
 
 ## 6. CI/CD와 AI 협업
 
@@ -44,7 +50,9 @@ Docker는 `.nvmrc`와 같은 Node 24.17.0, pnpm 10.15.1에서 환경 검증과 p
 
 AI는 workflow 분리, 스크립트 골격과 리뷰 후보를 만드는 데 썼다. 그러나 첫 계획은 분리 전 176초를 browser download로 단정해 효과 없는 cache를 제안했다. 측정 후 `--only-shell`은 download 중앙값을 11초에서 6초로 줄였지만 job 중앙값은 112초로 같아 채택하지 않았다.
 
-반대로 코드 리뷰는 `.env.production` 미검사, E2E 경로 필터 누락, logger import의 확장자·동적 import 우회를 찾았다. 각각 fixture, Git diff와 ESLint 입력으로 재현한 뒤 고쳤다. 원시 계측 호출처럼 참·거짓을 구문으로 가를 수 있는 규칙은 ESLint error로 내렸다. 이벤트 설계, E2E 범위와 성능 회귀 해석은 제품 맥락이 필요하므로 사람 판단에 남겼다.
+반대로 코드 리뷰는 `.env.production` 미검사, logger import의 확장자·동적 import 우회, 번들 예산의 미등록 라우트, `Dockerfile`의 `APP_ORIGIN` 기본값을 찾았다. 각각 fixture, Git diff, ESLint 입력, docker build로 재현한 뒤 고쳤다. 개선 전 프롬프트를 일부러 다시 걸어보니 오탐 세 건이 나왔고 전부 인접 파일을 확인하지 않은 추측이었다. 최소 개수를 요구하는 조건보다 근거를 요구하는 조건이 오탐을 줄인다.
+
+결론은 10주 내내 같은 형태였다. **참·거짓을 문자열이나 구문으로 가를 수 있으면 기계에 내린다.** 이번에 넷을 내렸고, 각 룰이 스스로 회귀하지 않도록 룰의 테스트를 룰보다 먼저 돌린다. 이벤트 설계, E2E 범위, 성능 회귀 해석, 문체 판단의 나머지는 제품과 언어 맥락이 필요하므로 사람에게 남겼다. 목록 기반 게이트가 목록에 없는 것을 통과시키는 것은 누락이 아니라 그 경계다.
 
 ## 8. 다시 만든다면
 
