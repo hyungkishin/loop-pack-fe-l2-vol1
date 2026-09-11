@@ -74,6 +74,12 @@ jobs:
         run: pnpm commit:test
       - name: Test E2E decision
         run: pnpm ci:test
+      # CI 구성 자체를 검사한다. 되돌린 실수 셋(배포 SHA checkout, Dockerfile 기본값,
+      # workflow와 check의 드리프트)이 다시 들어오면 여기서 막힌다.
+      - name: Test CI audit
+        run: pnpm ci:audit:test
+      - name: Audit CI configuration
+        run: pnpm ci:audit
       - name: Test environment validation
         run: pnpm env:test
       - name: Test bundle budget
