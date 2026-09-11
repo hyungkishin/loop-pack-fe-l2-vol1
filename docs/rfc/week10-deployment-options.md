@@ -18,10 +18,12 @@
 `Dockerfile`은 세 단계다.
 
 1. `dependencies`: `.nvmrc`와 같은 Node 24.17.0, pnpm 10.15.1에서 frozen lockfile로 의존성을 설치한다.
-2. `builder`: `APP_ORIGIN`을 받고 환경 검증 뒤 production build를 만든다.
+2. `builder`: `APP_ORIGIN`을 **필수 build 인자로** 받고 환경 검증 뒤 production build를 만든다. 기본값을 두지 않는다.
 3. `runner`: Next standalone 서버, static, public만 복사하고 비 root `nextjs` 사용자로 `node server.js`를 실행한다.
 
 `next.config.ts`의 `output: 'standalone'`은 필요한 파일만 `.next/standalone`에 모은다. runner에는 pnpm과 소스, 테스트, 전체 `node_modules`가 들어가지 않는다.
+
+`APP_ORIGIN`에 기본값을 두지 않는 이유는 `appOrigin.ts`와 같다. 조용한 localhost 기본값은 불일치를 숨긴 채 결과물에 굳는다. 초안은 여기에 `http://127.0.0.1:3000`을 기본값으로 뒀는데, 그러면 `--build-arg` 없이 빌드해도 `env:check`가 그 값으로 통과해 환경 게이트가 무력해진다. 인자를 주지 않으면 builder 단계가 `APP_ORIGIN이 없습니다`로 멈춘다. runner에도 같은 값을 굽고 `docker run -e APP_ORIGIN=...`으로 덮어쓸 수 있게 뒀다 — `getAppOrigin`은 요청마다 `process.env`를 읽는다.
 
 ## 3. 로컬 검증 증거
 
