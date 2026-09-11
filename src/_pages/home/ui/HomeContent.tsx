@@ -1,10 +1,15 @@
 'use client'
 
 import Link from 'next/link'
+// 측정 전용. 예산 게이트가 실제 의존성 추가를 잡는지 확인하려고 무의미하게 넣는다.
+import _ from 'lodash'
 import { useQuery } from '@tanstack/react-query'
 import ProductGrid from '@/widgets/product-grid/ui/ProductGrid'
 import { errorMessageOf, isRetryable } from '@/shared/api/http'
 import { homeQuery } from '@/_pages/home/api/home'
+
+// 측정 전용. tree shaking으로 사라지지 않게 실제로 호출한다.
+export const measurementProbe = _.startCase(_.camelCase('budget gate probe'))
 
 const categoryLabels: Record<string, string> = {
   casual: 'Casual',
