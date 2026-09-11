@@ -73,7 +73,9 @@ GitHub Actions는 스텝 단위로만 시간을 기록한다. 이전 workflow는
 
 setup 구간(2 + 14 + 11 = 27s)과 검증 체인(65s)으로 갈린다.
 
-**검증 항목과 실행 횟수는 유지한다.** 병렬화는 설치 중복과 산출물 전달 비용을 측정하기 전까지 적용하지 않는다. `test:e2e:prebuilt`가 앞 단계의 `.next`를 쓰기 때문에 job을 나누면 산출물을 artifact로 넘기거나 다시 build해야 하고, 그 비용을 재지 않은 상태에서 병렬화를 채택할 근거가 없다.
+**검증 항목과 실행 횟수는 유지한다.**
+
+초안은 병렬화를 "설치 중복 비용을 재기 전까지 적용하지 않는다"로 기각했다. 근거가 병목과 맞지 않았다. `.next` 의존은 E2E와 번들 예산만의 제약인데 lint·typecheck·unit·Storybook까지 같은 이유로 묶었다. 그 넷은 `.next`를 쓰지 않는다. 그래서 재기로 했다.
 
 ### 실험 A — chromium 다운로드를 headless shell로 좁힌다
 
@@ -128,6 +130,39 @@ after    FFmpeg (playwright ffmpeg v1011)
 
 실험 커밋(`340d77f6`)은 히스토리에 남기고 복구를 별도 커밋으로 뒀다. 다운로드가 실제로 병목이 되는 날 이 측정이 출발점이 된다.
 
+### 실험 B — 검증을 두 job으로 나눈다
+
+측정 PR 세 개를 같은 base로 열고 warm 3회씩 쟀다. 검증 집합은 세 arm 모두 같다.
+
+| 구성 | PR | warm raw | 중앙값 | 범위 |
+| --- | --- | --- | ---: | ---: |
+| 단일 job, 스텝 12개 | [#9](https://github.com/hyungkishin/loop-pack-fe-l2-vol1/pull/9) | 130, 119, 106s | **119s** | 106~130 |
+| 단일 job, `pnpm check` 한 줄 | [#10](https://github.com/hyungkishin/loop-pack-fe-l2-vol1/pull/10) | 101, 103, 112s | **103s** | 101~112 |
+| 2 job 임계경로 | [#11](https://github.com/hyungkishin/loop-pack-fe-l2-vol1/pull/11) | 86, 94, 83s | **86s** | 83~94 |
+
+**채택 기준 (실험 전 고정)**
+
+```
+검증 항목 동일
+AND 임계경로 중앙값이 baseline 범위의 하한보다 낮음
+```
+
+**판정 — 채택한다.** 임계경로 중앙값 86초는 baseline 범위 하한 106초보다 낮고, 두 측정 범위(106~130, 83~94)가 겹치지 않는다. runner 변동으로 설명되는 폭이 아니다.
+
+`static`은 브라우저도 `.next`도 쓰지 않아 Playwright 설치 27초를 아예 치르지 않는다. `runtime`에는 Storybook 테스트, build, 번들 예산, 조건부 E2E가 남는다.
+
+**대가를 함께 적는다.** 총 runner 시간은 119초에서 137초(54 + 83)로 늘었다. install이 job마다 한 번씩 돌기 때문이다. 사람이 기다리는 시간 33초를 총 compute 18초와 바꾼 것이다. 공유 러너 한도가 병목이 되면 이 교환을 다시 본다.
+
+### 함께 나온 것 — 스텝 분리는 무료가 아니었다
+
+같은 측정에서 예상하지 않은 값이 나왔다. `pnpm check` 한 줄 구성이 스텝 12개 구성보다 중앙값 **16초 빠르다**(103s 대 119s). 두 범위도 거의 겹치지 않는다(101~112 대 106~130).
+
+스텝마다 `pnpm`이 새로 기동하는 비용이다. B절에서 "스텝을 나누기 전에는 병목을 지목할 수 없었다"고 적었는데, 그 관측 능력의 값이 16초였다는 것이 이제 숫자로 남았다.
+
+**그래도 나눈 구성을 유지한다.** 어느 검증이 느린지 모르는 상태로 돌아가면 다음 최적화의 출발점이 없어진다. 13%를 관측 비용으로 지불하는 선택이고, 병렬화가 그보다 큰 33초를 돌려줬다.
+
+이 값은 애초 기준 측정(B절)에 없던 정보다. B절은 이미 스텝을 나눈 뒤 잰 값이라 Before가 아니었다. 같은 검증 집합의 한 줄 구성을 따로 재고 나서야 분리 비용이 분리됐다.
+
 ### 실험하지 않고 기각한 것 — `install-deps` 제거
 
 `install-deps` 스텝은 13~28초로 변동이 가장 크다. 제거하면 현재 runner에서 통과할 가능성이 있다.
@@ -136,13 +171,51 @@ after    FFmpeg (playwright ffmpeg v1011)
 
 ## D. 조건부 E2E
 
-`quality` job은 모든 PR에서 실행한다. architecture, unit, DOM, Storybook, lint, typecheck, 환경 변수, production build와 번들 예산도 조건을 붙이지 않는다. E2E 스텝만 PR의 base와 head 사이에 실행 경로가 바뀌었을 때 실행한다.
+### 허용 목록은 fail-open이었다
 
-실행 대상은 `src`, `public`, `e2e`, `scripts`, `.storybook`, workflow, 환경 파일, Node·pnpm 설정, lockfile과 각종 config다. 이 목록 중 하나라도 바뀌면 E2E를 실행한다. push와 수동 실행도 항상 실행한다. 반대로 문서만 바뀌면 production build 결과와 브라우저 흐름이 바뀌지 않으므로 생략한다.
+처음 판정은 허용 목록이었다. `src`, `e2e`, `scripts`, `.storybook`, workflow, 환경 파일, config가 바뀔 때만 E2E를 실행하고 나머지는 생략했다. 이 설계는 목록에 없는 경로에서 **조용히 생략**한다. 실제로 찍어봤다.
 
-별도 E2E job과 guard를 만들지 않았다. `test:e2e:prebuilt`는 같은 job 앞부분의 `.next`를 사용한다. job을 나누면 build artifact를 전달하거나 같은 build를 반복해야 한다. 단일 `quality` job 안에서 E2E 스텝만 생략하면 required status는 항상 보고되고 산출물도 그대로 재사용한다.
+| 변경한 파일 | 앞 판정 |
+| --- | --- |
+| `instrumentation.ts` | 생략 |
+| `middleware.ts` | 생략 |
+| `proxy.ts` | 생략 |
+| `src/foo.config.ts` | 실행 |
+| `docs/a.md` | 생략 |
 
-| 측정 PR | 변경 | E2E 결과 | Quality | Actions |
+앞의 셋은 모두 Next 런타임이 읽는 파일이다. 루트에 런타임 파일을 새로 만들면 가장 비싼 게이트가 빠진다. 과제가 경고한 "너무 좁으면 필요한 검증을 스킵해 깨진 코드가 통과해요"에 그대로 해당한다.
+
+**원인은 테스트가 없었다는 것이다.** 판정이 workflow YAML 안의 30줄 bash라 실행해 볼 수단이 없었다. 가장 미묘한 로직이 가장 검증이 없는 자리에 있었다.
+
+### 거부 목록으로 뒤집는다
+
+`scripts/ci/decide-e2e.mjs`로 옮기고 판정을 뒤집었다. **바뀐 경로가 전부 무해 목록에 해당할 때만 생략하고, 하나라도 모르는 경로가 있으면 실행한다.** 새 경로의 기본값이 실행이다.
+
+무해 목록은 `docs/`, `**/*.md`, `LICENSE`, `.gitignore`, `.gitattributes`, `.editorconfig`, `.prettierignore`, `.vscode/`, `.idea/`, `.github/ISSUE_TEMPLATE/`, `.github/CODEOWNERS`다. 여기에 경로를 넣을 때의 기준은 "이 파일만 바뀐 PR이 배포돼도 화면이 같은가"다.
+
+변경 목록을 읽지 못한 경우에도 실행한다. 그때 생략하면 조용한 false green이 된다.
+
+판정 근거를 job summary에 남긴다. PR 화면에서 왜 돌았는지, 어떤 경로가 판정을 만들었는지 보인다.
+
+### 스킵의 최종 방어선
+
+경로 판정 하나에 안전 논리를 걸어두지 않는다.
+
+| 이벤트 | E2E |
+| --- | --- |
+| `pull_request` (ready) | 무해 목록만이면 생략, 그 외 실행 |
+| `pull_request` (draft) | 생략 |
+| `merge_group` | 조건 없이 실행 |
+| `push` (main) | 조건 없이 실행 |
+| `workflow_dispatch` | 조건 없이 실행 |
+
+`merge_group`이 방어선이다. PR에서 생략한 검증을 main에 들어가기 직전에 한 번 더 돈다. draft에서 E2E를 아끼는 판단도 여기에 근거를 둔다. `pull_request`의 `types`에 `ready_for_review`를 넣어야 draft를 푼 순간 재실행이 걸린다.
+
+판정은 12개 케이스로 고정했다. 앞 구현이 놓친 루트 런타임 파일 셋, 모르는 확장자, 무해와 런타임 혼합, 빈 변경 목록, `merge_group`, draft가 모두 케이스다.
+
+### 조건에 걸리는 PR과 안 걸리는 PR
+
+| 측정 PR | 변경 | E2E | Quality | Actions |
 | --- | --- | --- | --- | --- |
 | [#3](https://github.com/hyungkishin/loop-pack-fe-l2-vol1/pull/3) | `src` 측정 파일 | 실행·성공 | 성공 | [run 34540029109](https://github.com/hyungkishin/loop-pack-fe-l2-vol1/actions/runs/34540029109) |
 | [#4](https://github.com/hyungkishin/loop-pack-fe-l2-vol1/pull/4) | 문서 측정 파일 | skipped | 성공 | [run 34540029859](https://github.com/hyungkishin/loop-pack-fe-l2-vol1/actions/runs/34540029859) |
@@ -188,6 +261,16 @@ after    FFmpeg (playwright ffmpeg v1011)
 
 실제 build 산출물 8개 라우트로 실행하면 종료 코드 0, 같은 입력에 `/checkout`을 더하면 종료 코드 1과 `예산 미등록 라우트: /checkout`이다. 세 케이스를 `route-bundle.test.mjs`에 넣었다.
 
+### 예산은 상한만 본다 — 기준선을 함께 둔다
+
+예산은 618 KiB를 넘을 때만 막는다. 588 KiB에서 610 KiB로 오르는 22 KiB는 통과한다. 임계값도 손으로 갱신하는 상수라 "무엇이 몇 바이트 늘렸나"가 어디에도 남지 않는다.
+
+그래서 측정값 자체를 커밋된 기준선(`docs/measurements/week-10/route-bundle-baseline.json`)과 맞춘다. 번들이 바뀌면 같은 PR에 기준선 diff가 올라오고 리뷰가 숫자를 본다. 허용 폭 512 B는 toolchain 비결정성만 흡수하는 크기다 — 측정 편차가 0 B였으므로 기능 추가는 이 폭에 숨지 않는다. 갱신은 `pnpm size:baseline`이다.
+
+예산을 두지 않은 `/_not-found`, `/playground`, `/performance-lab/inp`도 기준선에는 들어간다. 예산 대상이 아니라는 판단이 "얼마든 늘어도 된다"는 뜻은 아니다.
+
+**base를 함께 build해 비교하는 쪽이 더 정확하다.** 그 경로는 base worktree에 의존성을 설치하고 build를 한 번 더 해야 해서 약 10초와 구조 복잡도가 든다. 측정 편차가 0 B인 값이라 커밋된 기준선으로 같은 목적을 비용 없이 얻는다고 판단했다. 편차가 커지면 이 교환을 다시 본다.
+
 이 스크립트는 Next 16.2.10의 진단 파일 계약에 의존한다. 파일이나 필수 라우트가 없으면 통과시키지 않고 실패한다. Next를 올릴 때 진단 파일 구조와 측정 단위를 함께 재검토한다.
 
 ## F. 환경 변수 게이트
@@ -212,33 +295,103 @@ after    FFmpeg (playwright ffmpeg v1011)
 
 `docker run -e APP_ORIGIN=...`으로 덮어쓸 수 있다. build와 runtime 값이 같아야 하는 제약은 그대로다.
 
-## G. 품질 게이트
+## G. 품질 게이트와 required check
 
 | 검증 | required | 판단 |
 | --- | --- | --- |
-| `quality` | 예 | architecture, test, lint, type, env, build, bundle을 한 상태로 보고한다. E2E가 생략돼도 job은 항상 존재한다. |
-| E2E 개별 상태 | 아니오 | 같은 `quality` 안의 조건부 스텝이다. 실행 대상이면 실패가 job을 막고 문서 PR이면 생략한다. |
+| `static` | 예 | architecture, unit·DOM, lint, 문체, 커밋 메시지, CI 구성, 타입과 게이트별 테스트를 한 상태로 보고한다. 조건부 스텝이 없어 항상 결론이 난다. |
+| `runtime` | 예 | Storybook, 환경 변수, production build, 번들 예산, 조건부 E2E. E2E가 생략돼도 job은 항상 존재해 성공으로 보고한다. |
+| E2E 개별 상태 | 아니오 | `runtime` 안의 조건부 스텝이다. 실행 대상이면 실패가 job을 막고, 무해 변경이면 생략한다. |
 | Lighthouse | 아니오 | 7주차 기준은 throttling 5회 중앙값이다. 공유 CI runner 한 번의 점수를 merge blocker로 쓰면 변동성을 결함으로 오인한다. |
 | AI 리뷰 | 아니오 | 모델과 프롬프트에 따라 결과가 바뀌므로 advisory로만 쓴다. |
 
-`quality`의 workflow 권한은 `contents: read`뿐이다. PR 코멘트와 secrets를 쓰지 않는다. checkout, setup-node, pnpm setup, artifact 액션은 commit SHA로 고정했다. `pull_request_target`도 사용하지 않는다.
+### required와 조건부 스킵이 충돌하지 않는지 실제로 확인했다
+
+앞 기록은 "항상 존재하는 job 안의 스텝이라 대기 상태가 생기지 않는다"는 **구조 설명뿐**이었다. required를 걸어본 적이 없었다.
+
+포크의 `measure/week10-protected-base`에 branch protection을 걸어 `static`과 `runtime`을 required로 지정하고, 런타임에 닿지 않는 주석 한 줄만 바꾼 PR [#14](https://github.com/hyungkishin/loop-pack-fe-l2-vol1/pull/14)을 열었다.
+
+| 항목 | 결과 |
+| --- | --- |
+| required status check | `static`, `runtime` |
+| `static` | SUCCESS |
+| `runtime` | SUCCESS |
+| `Decide whether E2E is required` | success |
+| `E2E` | **skipped** |
+| PR 상태 | `mergeable=MERGEABLE`, `mergeStateStatus=CLEAN` |
+
+E2E가 생략된 PR이 대기 상태에 걸리지 않고 머지 가능해진다. 같은 조건에서 `runtime`은 67초였고, E2E가 도는 PR은 87초였다.
+
+upstream 저장소는 관리자 권한이 없어 정책만 문서화한다. required 후보는 `static`과 `runtime` 둘이다.
+
+### 보안
+
+`quality`의 workflow 권한은 `contents: read`뿐이다. PR 코멘트와 secrets를 쓰지 않는다. checkout, setup-node, pnpm setup, cache, artifact 액션은 commit SHA로 고정했다. `pull_request_target`도 사용하지 않는다. 이 항목들은 이제 `ci:audit`이 기계로 확인한다.
 
 secrets를 쓰는 workflow는 `deployment-smoke` 하나다. `deployment_status`는 `pull_request_target`과 같이 base 저장소 권한과 secrets를 들고 도는 트리거라, 배포 SHA를 checkout하면 fork PR preview의 코드가 bypass secret이 있는 환경에서 실행된다. 실행 코드는 기본 브랜치에서 받고, 대상 URL도 https `*.vercel.app`으로 좁혔다. 근거는 `week10-release-flow.md`에 있다.
 
-## H. 함께 생각해 볼 질문
+## H. 게이트와 그 자가 검증
+
+게이트 자신이 회귀하면 본 게이트는 성공으로 남는다. 그래서 게이트마다 테스트를 붙이고, 테스트를 게이트보다 먼저 실행한다. `env:test`-`env:check`, `size:test`-`size:check`가 그 배치였고 나머지도 같게 맞췄다.
+
+| 막는 것 | 게이트 | 테스트 | 실제로 겪은 실수 |
+| --- | --- | --- | --- |
+| 화면의 원시 계측 import | ESLint `no-restricted-imports`·`no-restricted-syntax` | `lint:rule:test` 11개 | 확장자·동적 import 우회, `.test.ts`에서 빠진 동적 import 제한 |
+| 커밋의 AI 서명 | `commit-msg` 훅 + CI `Check commit messages` | `commit:test` 7개 | 서명이 붙은 커밋 5개가 실제로 만들어졌다 |
+| 주석의 의인화·영어식 직역 | `style:check` (python) | `style:test` 24개 | `상태를 가진 타입` 같은 직역이 주석에 남아 있었다 |
+| 예산 미등록 라우트 | `size:check` | `size:test` 13개 | `/checkout` 5 MB fixture가 종료 코드 0으로 통과했다 |
+| 예산 안에서의 번들 증가 | `size:check` 기준선 비교 | 같은 테스트 | 절대 상수만 봐서 증가가 기록되지 않았다 |
+| 필수 환경 변수 누락 | `env:check` | `env:test` | — |
+| E2E를 빠뜨리는 경로 판정 | `decide-e2e.mjs` | `ci:test` 12개 | 허용 목록이 fail-open이었다 |
+| CI 구성 자체의 퇴행 | `ci:audit` (python) | `ci:audit:test` 17개 | 배포 SHA checkout, Dockerfile 기본값, workflow와 check 드리프트 |
+
+### CI 구성 감사
+
+이번에 고친 실수 셋에는 재발 방지 장치가 없었다. 되돌려도 막을 것이 없었다.
+
+1. `deployment-smoke.yml`이 배포 SHA를 checkout했다. `deployment_status`는 base 저장소 권한과 secrets를 들고 도는 트리거라, fork PR preview의 코드가 bypass secret이 있는 job에서 실행될 수 있었다.
+2. `Dockerfile`이 `ARG APP_ORIGIN=http://127.0.0.1:3000`으로 기본값을 채웠다. `appOrigin.ts`가 기본값을 금지한 자리인데 build 게이트가 그 값으로 통과했다.
+3. workflow 스텝 목록과 `pnpm check`가 따로 있어 새 게이트를 양쪽에 손으로 넣었다. 오늘만 다섯 번 했다.
+
+`scripts/ci/audit_ci.py`가 셋을 검사한다.
+
+| 검사 | 근거 |
+| --- | --- |
+| 최상위 `permissions`가 `contents: read` | 최소 권한 |
+| `pull_request_target` 금지 (트리거 키만 본다) | fork PR에서 secrets 접근 |
+| 권한 있는 트리거에서 신뢰 못 할 ref checkout 금지 | 위 1번 |
+| 모든 `uses:`를 40자 commit SHA로 핀 | third-party action 공급망 |
+| 모든 job에 `timeout-minutes` | 폭주 차단 |
+| `pull_request` 트리거에서 `secrets.` 사용 금지 | fork PR에서 secrets 접근 |
+| 필수 환경 변수에 Dockerfile `ARG` 기본값 금지 | 위 2번 |
+| `quality.yml`의 `pnpm X` 집합 = `check` 스크립트 집합 | 위 3번 |
+
+일치 검사는 자기 자신도 대상에 넣는다. `ci:audit`을 한쪽에만 추가하면 `ci:audit`이 빨개진다.
+
+**한계를 적어 둔다.** YAML 파서를 쓰지 않는다. 의존성을 늘리지 않으려고 필요한 키만 줄 단위로 읽는다. 들여쓰기를 크게 바꾸면 이 검사가 눈이 먼다. 검사 대상이 workflow 두 개뿐이라 그 교환을 받아들였고, workflow가 늘면 파서를 넣는다.
+
+룰을 만들다 오탐도 겪었다. 주석의 `pull_request_target` 설명을 트리거로 봤고, 배포 smoke의 `test:smoke`를 PR 게이트 일치 검사에 넣었다. 둘 다 케이스로 남겼다. 문체 게이트에서도 `복원한다`가 `원한다`에 걸린 오탐과 `좁힐 필요가 있다`가 빠진 미탐이 각각 하나 있었다.
+
+### 무엇을 기계에 두지 않았나
+
+문체 전부를 기계가 판정할 수는 없다. `style:check`는 반복 지적된 표현만 목록으로 고정하고, 목록에 없는 표현은 통과시킨다. 그것은 누락이 아니라 설계다. 백틱 인용도 검사에서 뺀다 — 룰이 왜 있는지 적으려면 나쁜 표현을 인용해야 한다.
+
+커밋 서명 검사도 이름 기반이라 좁다. 사람 공동 작업자의 `Co-authored-by`는 정당하므로 trailer 자체를 막지 않고 알려진 AI 계정과 생성 문구만 거부한다.
+
+## I. 함께 생각해 볼 질문
 
 ### E2E를 모든 PR에 required로 걸면 어떤 문제가 생길까?
 
-문서 변경에도 브라우저 설치와 12개 흐름을 실행해 비용이 반복된다. 조건부 job 자체를 required로 두면 실행되지 않은 PR이 대기 상태에 남을 수 있다. 이 저장소는 항상 존재하는 `quality` job 안에서 실행 경로가 바뀐 경우에만 E2E를 실행해 두 문제를 분리했다.
+문서 변경에도 브라우저 설치와 12개 흐름을 실행해 비용이 반복된다. 조건부 job 자체를 required로 두면 실행되지 않은 PR이 대기 상태에 남는다. 이 저장소는 항상 존재하는 `runtime` job 안의 스텝으로 두고, required는 `static`과 `runtime`에 건다. 실제로 protection을 걸고 문서만 바꾼 PR이 `mergeStateStatus=CLEAN`이 되는 것까지 확인했다. 그리고 PR에서 생략한 검증은 `merge_group`이 병합 직전에 한 번 더 돈다.
 
 ### Lighthouse 점수 하락은 항상 merge blocker여야 할까?
 
-아니다. 네트워크와 CPU throttling에 따른 변동 폭이 코드 변화보다 클 수 있다. 결정적인 bundle byte 예산은 모든 PR을 막고, Lighthouse는 주요 화면 변경에서 5회 중앙값과 범위를 비교하는 판단 자료로 남긴다.
+아니다. 네트워크와 CPU throttling에 따른 변동 폭이 코드 변화보다 클 수 있다. 결정적인 bundle byte는 예산과 기준선 두 층으로 막고, Lighthouse는 주요 화면 변경에서 5회 중앙값과 범위를 비교하는 판단 자료로 남긴다. 가르는 기준은 "같은 입력에서 같은 답이 나오는가"다.
 
 ### Preview가 Production API를 바라보면 무슨 일이 생길까?
 
-테스트 주문·이메일·결제가 실제 데이터와 외부 시스템에 들어갈 수 있다. 현재 mock API에는 이 경계가 없지만 실제 API를 붙이면 Preview와 Production의 API origin을 별도 필수 변수로 두고, Preview 값에서 Production host를 거부하는 검증을 추가해야 한다.
+테스트 주문·이메일·결제가 실제 데이터와 외부 시스템에 들어갈 수 있다. 현재 mock API에는 이 경계가 없지만 실제 API를 붙이면 Preview와 Production의 API origin을 별도 필수 변수로 두고, Preview 값에서 Production host를 거부하는 검증을 추가해야 한다. 이번에 `Dockerfile`이 `APP_ORIGIN`에 localhost 기본값을 넣어 환경 게이트를 통과시킨 것이 같은 사고의 축소판이었다. 기본값이 있으면 게이트는 값이 틀렸는지 알 수 없다.
 
 ### AI가 만든 workflow를 그대로 merge하면 어떤 위험이 있을까?
 
-이번 초안은 176초를 브라우저 다운로드로 잘못 귀속해 효과 없는 캐시를 제안했다. 이후 리뷰에서는 `.env` 미검사, 확장자·동적 import 우회와 경로 필터 누락을 찾았다. AI 출력은 가설과 후보로 받고 실제 diff, 공식 계약, 실패 주입과 Actions 로그로 확인한 뒤 채택한다.
+이번 초안은 176초를 브라우저 다운로드로 잘못 귀속해 효과 없는 캐시를 제안했고, E2E 경로 필터를 fail-open 허용 목록으로 만들었고, 배포 smoke가 배포 SHA를 secrets와 함께 checkout하게 뒀다. 셋 다 그럴듯했고 CI는 초록이었다. 그래서 지금은 리뷰 지적을 문서가 아니라 게이트로 받는다 — 경로 판정은 12개 케이스로, workflow의 권한·트리거·action 핀·Dockerfile 기본값은 `ci:audit`으로 고정했다. AI 출력은 가설로 받고 실패 주입과 Actions 로그로 확인한 뒤 채택한다.

@@ -72,7 +72,7 @@ DEPLOYMENT_URL=https://production.example.com pnpm test:smoke
 
 ## 5. 자동 검증과 사람 확인의 경계
 
-`quality`와 번들 byte 예산은 결정적이므로 required 후보다. 배포 smoke도 URL이 확보된 이후 Preview와 Production 승격 조건으로 사용한다. Lighthouse 단일 점수, Sentry 오류 부재, 이벤트 funnel의 타당성은 실행 환경과 트래픽에 따라 달라지므로 사람이 범위와 추세를 판단한다.
+required는 `static`과 `runtime` 둘이다. 포크의 보호 브랜치에 실제로 걸어 문서만 바꾼 PR이 `mergeStateStatus=CLEAN`이 되는 것을 확인했다(PR #14). 조건부 E2E는 `runtime` 안의 스텝이라 생략돼도 job 상태가 보고되고, 생략한 검증은 `merge_group`이 병합 직전에 다시 돈다. 번들 byte 예산도 결정적이므로 required 후보다. 배포 smoke도 URL이 확보된 이후 Preview와 Production 승격 조건으로 사용한다. Lighthouse 단일 점수, Sentry 오류 부재, 이벤트 funnel의 타당성은 실행 환경과 트래픽에 따라 달라지므로 사람이 범위와 추세를 판단한다.
 
 현재 upstream 저장소의 branch protection을 변경할 관리자 권한이 없다. 따라서 `quality`를 required로 둘 정책은 정했지만 설정 완료라고 쓰지 않는다.
 
