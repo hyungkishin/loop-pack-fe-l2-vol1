@@ -217,8 +217,12 @@ describe('기준선 대비 증감', () => {
       })
 
       assert.equal(result.status, 1)
-      assert.match(result.stderr, /기준선과 다른 라우트 1개/)
-      assert.match(result.stderr, /\+8200 B/)
+      // 상세는 stdout과 summary에, stderr에는 실패 이유 한 줄만 남긴다.
+      // 같은 블록을 둘 다에 쓰면 CI 로그에 두 번 찍혀 두 건으로 읽힌다.
+      assert.match(result.stdout, /기준선과 다른 라우트 1개/)
+      assert.match(result.stdout, /\+8200 B/)
+      assert.match(result.stderr, /번들 기준선 불일치: \/ \+8200 B/)
+      assert.doesNotMatch(result.stderr, /기준선과 다른 라우트/)
     } finally {
       rmSync(fixtureDir, { recursive: true, force: true })
     }
@@ -247,6 +251,7 @@ describe('기준선 대비 증감', () => {
 
       assert.equal(result.status, 1)
       assert.match(result.stderr, /기준선 파일이 없습니다/)
+      assert.match(result.stdout, /기준선 파일이 없습니다/)
     } finally {
       rmSync(fixtureDir, { recursive: true, force: true })
     }

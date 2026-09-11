@@ -197,7 +197,19 @@ const run = (argv = []) => {
   }
 
   if (baseline === null || drifted.length > 0) {
-    process.stderr.write(baselineReport)
+    // 상세는 이미 stdout과 summary에 있다. 같은 블록을 stderr에 다시 쓰면 로그에
+    // 두 번 찍혀 읽는 사람이 두 건으로 오인한다. 실패 이유만 한 줄로 남긴다.
+    process.stderr.write(
+      baseline === null
+        ? `기준선 파일이 없습니다: ${baselinePath}\n`
+        : `번들 기준선 불일치: ${drifted
+            .map(({ route, drift }) =>
+              drift === null
+                ? `${route} 측정값 없음`
+                : `${route} ${drift > 0 ? '+' : ''}${drift} B`,
+            )
+            .join(', ')}\n`,
+    )
     process.exitCode = 1
   }
 
