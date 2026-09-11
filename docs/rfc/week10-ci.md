@@ -166,6 +166,28 @@ after    FFmpeg (playwright ffmpeg v1011)
 
 원격 측정 PR [#5](https://github.com/hyungkishin/loop-pack-fe-l2-vol1/pull/5)에서는 홈 예산만 500 KiB로 낮추고 이에 맞춘 단위 테스트를 먼저 통과시켰다. [run 34541923894](https://github.com/hyungkishin/loop-pack-fe-l2-vol1/actions/runs/34541923894)는 production build 뒤 `Check bundle budget`에서 실패했다. 출력과 summary에는 현재 588.4 KiB, 예산 500.0 KiB, 초과 88.4 KiB가 표시됐다. 첫 시도는 fixture의 고정 기대값이 먼저 실패해 게이트 증거로 사용하지 않았다.
 
+### 예산표에 없는 라우트를 통과시키던 구멍
+
+처음 구현은 `ROUTE_BUDGETS`의 키만 순회했다. 진단 파일에 있는데 예산표에 없는 라우트는 표에 나타나지도 않고 통과했다. `/checkout`에 5,000,000 B를 넣은 fixture로 확인했더니 종료 코드 0이었다. **라우트를 새로 만드는 것만으로 예산 게이트를 빠져나갈 수 있었다.**
+
+두 목록 중 하나에 이름이 있어야 통과하게 바꿨다. 예산을 정하거나, 이유를 적고 제외한다. 임계값은 모두 같은 정책이다 — 같은 build에서 3회 측정해 편차가 0인 현재값에 5%를 더하고 KiB로 올림한다.
+
+| 라우트 | 현재 | 예산 | 근거 |
+| --- | ---: | ---: | --- |
+| `/` | 602,487 B (588.4 KiB) | 618 KiB | 7주차 추이 위의 표 |
+| `/products` | 619,069 B (604.6 KiB) | 635 KiB | 7주차 추이 위의 표 |
+| `/login` | 576,958 B (563.4 KiB) | 592 KiB | 10주차 현재값 |
+| `/orders` | 583,526 B (569.8 KiB) | 599 KiB | 10주차 현재값 |
+| `/orders/new` | 577,350 B (563.8 KiB) | 593 KiB | 10주차 현재값 |
+
+| 예산을 두지 않는 라우트 | 이유 |
+| --- | --- |
+| `/_not-found` | Next 내부 라우트다. 제품 화면이 아니고 공통 청크만 싣는다. |
+| `/playground` | 컴포넌트 확인용 실습 화면이다. 제품 표면이 아니다. |
+| `/performance-lab/inp` | 7주차 INP 측정 실습 화면이다. 측정 대상을 일부러 무겁게 두는 자리다. |
+
+실제 build 산출물 8개 라우트로 실행하면 종료 코드 0, 같은 입력에 `/checkout`을 더하면 종료 코드 1과 `예산 미등록 라우트: /checkout`이다. 세 케이스를 `route-bundle.test.mjs`에 넣었다.
+
 이 스크립트는 Next 16.2.10의 진단 파일 계약에 의존한다. 파일이나 필수 라우트가 없으면 통과시키지 않고 실패한다. Next를 올릴 때 진단 파일 구조와 측정 단위를 함께 재검토한다.
 
 ## F. 환경 변수 게이트
@@ -175,6 +197,7 @@ after    FFmpeg (playwright ffmpeg v1011)
 이름이 `NEXT_PUBLIC_`으로 시작하면서 `SECRET`, `TOKEN`, `PASSWORD`, `PRIVATE`, `API_KEY`, `ACCESS_KEY`를 포함하면 브라우저 노출 후보로 거부한다. 오류에는 변수 이름만 쓰고 값은 쓰지 않는다. mock 인증의 `AUTH_SESSION_SECRET`은 현재 코드가 과제용 기본값을 명시한 상태라 필수 목록에 넣지 않았다. 실제 백엔드로 전환할 때 기본값을 제거하고 Preview·Production 필수 변수로 승격한다.
 
 자가 검증은 누락, 상대 URL, ftp URL, 공개 비밀 변수와 `.env.production` 입력을 모두 실패시켰다. 성공·실패 결과는 build 전에 summary에 남는다.
+
 
 ## G. 품질 게이트
 
