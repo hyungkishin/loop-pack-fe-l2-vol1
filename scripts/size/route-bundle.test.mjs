@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process'
 import { describe, it } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import {
+  compareWithBaseline,
   evaluateRouteBudgets,
   findUnregisteredRoutes,
 } from './route-bundle.mjs'
@@ -141,6 +142,111 @@ describe('예산 미등록 라우트', () => {
 
       assert.equal(result.status, 1)
       assert.match(result.stderr, /예산 미등록 라우트: \/checkout/)
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('기준선 대비 증감', () => {
+  it('허용 폭 안의 차이는 통과시킨다', () => {
+    // toolchain 비결정성만 흡수한다. 기능 추가는 KB 단위라 이 폭에 숨지 않는다.
+    const drifted = compareWithBaseline(
+      [{ route: '/', firstLoadUncompressedJsBytes: 602_600 }],
+      { '/': 602_487 },
+    )
+
+    assert.deepEqual(drifted, [])
+  })
+
+  it('예산 안에서 늘어난 증가도 잡는다', () => {
+    // 예산은 상한만 본다. 618 KiB 아래에서 8 KiB가 늘어도 예산 게이트는 통과한다.
+    const drifted = compareWithBaseline(
+      [{ route: '/', firstLoadUncompressedJsBytes: 610_687 }],
+      { '/': 602_487 },
+    )
+
+    assert.equal(drifted.length, 1)
+    assert.equal(drifted[0].drift, 8_200)
+  })
+
+  it('줄어든 것도 기준선 갱신 대상이다', () => {
+    const drifted = compareWithBaseline(
+      [{ route: '/', firstLoadUncompressedJsBytes: 580_000 }],
+      { '/': 602_487 },
+    )
+
+    assert.equal(drifted.length, 1)
+    assert.ok(drifted[0].drift < 0)
+  })
+
+  it('기준선에 있는 라우트가 사라지면 잡는다', () => {
+    const drifted = compareWithBaseline([], { '/orders': 583_526 })
+
+    assert.equal(drifted.length, 1)
+    assert.equal(drifted[0].actual, null)
+  })
+
+  it('CLI는 기준선 증감을 실패로 보고한다', () => {
+    const fixtureDir = mkdtempSync(join(tmpdir(), 'week10-size-'))
+    const statsPath = join(fixtureDir, 'route-bundle-stats.json')
+    const baselinePath = join(fixtureDir, 'baseline.json')
+
+    try {
+      writeFileSync(
+        statsPath,
+        JSON.stringify([
+          { route: '/', firstLoadUncompressedJsBytes: 610_687 },
+          { route: '/products', firstLoadUncompressedJsBytes: 619_069 },
+          { route: '/login', firstLoadUncompressedJsBytes: 576_958 },
+          { route: '/orders', firstLoadUncompressedJsBytes: 583_526 },
+          { route: '/orders/new', firstLoadUncompressedJsBytes: 577_350 },
+        ]),
+        'utf8',
+      )
+      writeFileSync(baselinePath, JSON.stringify({ '/': 602_487 }), 'utf8')
+
+      const result = spawnSync(process.execPath, [checkerPath], {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          GITHUB_STEP_SUMMARY: '',
+          ROUTE_BUNDLE_STATS_PATH: statsPath,
+          ROUTE_BUNDLE_BASELINE_PATH: baselinePath,
+        },
+      })
+
+      assert.equal(result.status, 1)
+      assert.match(result.stderr, /기준선과 다른 라우트 1개/)
+      assert.match(result.stderr, /\+8200 B/)
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true })
+    }
+  })
+
+  it('기준선 파일이 없으면 실패한다', () => {
+    const fixtureDir = mkdtempSync(join(tmpdir(), 'week10-size-'))
+    const statsPath = join(fixtureDir, 'route-bundle-stats.json')
+
+    try {
+      writeFileSync(
+        statsPath,
+        JSON.stringify([{ route: '/', firstLoadUncompressedJsBytes: 1 }]),
+        'utf8',
+      )
+
+      const result = spawnSync(process.execPath, [checkerPath], {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          GITHUB_STEP_SUMMARY: '',
+          ROUTE_BUNDLE_STATS_PATH: statsPath,
+          ROUTE_BUNDLE_BASELINE_PATH: join(fixtureDir, 'missing.json'),
+        },
+      })
+
+      assert.equal(result.status, 1)
+      assert.match(result.stderr, /기준선 파일이 없습니다/)
     } finally {
       rmSync(fixtureDir, { recursive: true, force: true })
     }
