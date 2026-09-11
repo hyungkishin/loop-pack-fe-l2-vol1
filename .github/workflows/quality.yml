@@ -130,6 +130,17 @@ jobs:
       - name: Download Playwright Chromium
         run: pnpm exec playwright install chromium
 
+      # 실험: Next의 build 캐시를 복원한다. 채택 기준은 실험 전에 고정한다 —
+      # 검증 항목 동일 AND runtime 임계경로 중앙값이 최종 구성 범위의 하한보다 낮음.
+      # build가 10초라 효과가 없을 가능성이 높고, 그 기각 근거도 기록으로 남긴다.
+      - name: Restore Next build cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .next/cache
+          key: next-build-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            next-build-${{ hashFiles('pnpm-lock.yaml') }}-
+
       - name: Storybook tests
         run: pnpm test:storybook
       - name: Validate environment
