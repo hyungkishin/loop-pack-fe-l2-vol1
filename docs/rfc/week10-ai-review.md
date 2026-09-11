@@ -64,15 +64,31 @@ correctness, CI false-green, secret exposure를 우선한다.
 
 ESLint의 `no-restricted-imports`는 analytics 외부에서 `track`, `identify`, `reset`의 정적 import를 막는다. alias, 상대경로, 확장자 표기를 모두 포함한다. `no-restricted-syntax`는 같은 logger의 동적 import를 막는다. analytics 내부 wrapper와 `flush`, 초기화 함수는 허용한다.
 
-자가 검증 결과는 다음과 같다.
+자가 검증은 문서의 표가 아니라 `scripts/lint/analytics-rule.test.mjs`에 고정했다. `env:check`를 `env:test`가, `size:check`를 `size:test`가 각각 검증하는 것과 같은 배치다. ESLint Node API로 각 입력을 린팅해 승격한 두 룰의 메시지만 센다.
 
-| 입력 | 결과 |
+| 입력 | 기대 | 룰 |
+| --- | --- | --- |
+| `track` alias import | 실패 | `no-restricted-imports` |
+| `identify` 상대경로 import | 실패 | `no-restricted-imports` |
+| `track` `.js` 확장자 import | 실패 | `no-restricted-imports` |
+| `import * as logger` namespace import | 실패 | `no-restricted-imports` |
+| `export { track } from` re-export | 실패 | `no-restricted-imports` |
+| logger 동적 import | 실패 | `no-restricted-syntax` |
+| `flush` import | 통과 | — |
+| `src/analytics` 내부 wrapper | 통과 | — |
+| `.test.ts`의 계측 import·동적 import | 실패 | 두 룰 |
+| 기존 `.test.ts` Testing Library 제한 | 실패 | `no-restricted-imports` |
+
+문서 표로만 두면 `eslint.config.mjs`의 패턴 문자열 하나가 빠져도 `pnpm lint`는 그대로 통과한다. 룰을 세 가지로 훼손해 테스트가 그 회귀를 검출하는지 확인했다.
+
+| 훼손 | 결과 |
 | --- | --- |
-| `track` alias import | 실패 |
-| `identify` 상대경로 import | 실패 |
-| `track` `.js` 확장자 import | 실패 |
-| logger 동적 import | 실패 |
-| `flush` import | 통과 |
-| 기존 `.test.ts` Testing Library 제한 | 계속 실패 |
+| `group`에서 `logger.*` 두 패턴 제거 | `확장자를 붙인 import를 막는다` 실패 |
+| src 블록의 `no-restricted-syntax` 제거 | `동적 import를 막는다` 실패 |
+| `.test.ts` 블록에서 계측 제한 제거 | `node 테스트에서도 원시 계측 import를 막는다` 실패 |
+
+11개 중 정확히 해당 케이스만 떨어졌고 복원 후 11개가 통과했다. CI에서는 `Lint` 스텝 앞의 `Test promoted lint rule`이 같은 테스트를 돌린다.
+
+테스트를 쓰는 과정에서 구멍 하나를 찾았다. src 블록이 `.test.ts`를 `ignores`로 빼면서 동적 import 제한까지 함께 빠져 있었다. 정적 import만 막힌 테스트 파일이 남은 우회로였다. `.test.ts` 블록에 같은 제한을 다시 걸었다. 기존 테스트의 동적 import는 모두 자기 모듈 대상이라 영향이 없다.
 
 원시 계측 함수의 import 여부는 맥락과 관계없이 판별할 수 있으므로 기계에 둔다. wrapper가 어떤 이벤트 이름과 프로퍼티를 가져야 하는지, 새 계측 SDK가 필요한지는 제품과 분석 맥락이 필요하므로 사람 리뷰에 남긴다. AI 리뷰는 그 사이에서 누락 후보를 찾지만 merge를 직접 막지 않는다.

@@ -163,6 +163,9 @@ export default defineConfig(
           ],
         },
       ],
+      // 위 블록이 `.test.ts`를 ignores로 빼는 바람에 동적 import 제한까지 함께 빠졌다.
+      // 정적 import만 막으면 테스트 파일이 남은 우회로가 된다. 같은 제한을 다시 건다.
+      'no-restricted-syntax': ['error', rawAnalyticsDynamicImportRestriction],
     },
   },
 
