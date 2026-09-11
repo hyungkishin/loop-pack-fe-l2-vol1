@@ -4,11 +4,11 @@
   "private": true,
   "packageManager": "pnpm@10.15.1",
   "engines": {
-    "node": ">=22.12.0"
+    "node": "24.x"
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "pnpm env:check && next build",
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit",
@@ -17,6 +17,7 @@
     "test:storybook": "vitest run --project=storybook",
     "test:e2e": "APP_ORIGIN=http://127.0.0.1:3000 pnpm build && pnpm test:e2e:prebuilt",
     "test:e2e:prebuilt": "playwright test",
+    "test:smoke": "playwright test --config=playwright.smoke.config.ts",
     "storybook": "storybook dev -p 6006",
     "build:storybook": "storybook build",
     "env:check": "node scripts/validate-env.mjs",
