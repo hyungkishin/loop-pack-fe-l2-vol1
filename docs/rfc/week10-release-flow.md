@@ -12,7 +12,11 @@
 
 `quality`는 architecture, 단위·DOM, Storybook, lint, typecheck, 환경 변수, production build와 번들 예산을 항상 실행한다. 실행 경로가 바뀐 PR과 main push에서는 E2E 12개도 실행한다. 문서만 바뀐 PR은 E2E만 생략한다.
 
-배포 smoke는 `.github/workflows/deployment-smoke.yml`이 맡는다. Vercel이 성공한 `deployment_status`를 GitHub에 보내면 해당 deployment SHA를 checkout하고 `environment_url`을 대상으로 실행한다. 연결되지 않은 플랫폼은 Actions의 수동 실행에 Preview 또는 Production URL을 넣어 같은 검증을 호출한다.
+배포 smoke는 `.github/workflows/deployment-smoke.yml`이 맡는다. Vercel이 성공한 `deployment_status`를 GitHub에 보내면 `environment_url`을 대상으로 실행한다. 실행할 코드는 배포 SHA가 아니라 **기본 브랜치**에서 checkout한다. 연결되지 않은 플랫폼은 Actions의 수동 실행에 Preview 또는 Production URL을 넣어 같은 검증을 호출한다.
+
+`deployment_status`는 base 저장소의 권한과 secrets를 들고 도는 트리거다. 여기서 배포 SHA를 checkout하면 fork PR의 preview 배포에서 온 코드를 실행하게 되고, 같은 job의 `VERCEL_AUTOMATION_BYPASS_SECRET`이 그 코드에 닿는다. `pull_request_target`을 피하는 이유와 같은 구조다. 배포 커밋의 스펙으로 재는 편이 정확하지만 그 정확도는 신뢰 경계와 맞바꿀 값이 아니라서, 실행 코드는 기본 브랜치로 고정하고 배포 SHA는 summary 기록에만 남긴다. smoke 3개는 어느 브랜치의 배포에서도 성립해야 하는 최소 계약이다.
+
+secret이 나갈 상대도 함께 좁혔다. `DEPLOYMENT_URL`은 이벤트 payload나 수동 입력에서 오는데 bypass secret을 헤더로 붙여 보내므로, 값이 비었는지만 확인하면 임의의 호스트로 보낼 수 있다. https이고 호스트가 `*.vercel.app`일 때만 실행한다. 다른 플랫폼으로 옮기면 이 허용 목록을 함께 고친다.
 
 ## 2. Preview와 Production
 

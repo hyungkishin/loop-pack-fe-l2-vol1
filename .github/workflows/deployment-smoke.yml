@@ -25,10 +25,18 @@ jobs:
       DEPLOYMENT_URL: ${{ inputs.deployment_url || github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
     steps:
-      - name: Checkout deployed commit
+      # 배포 SHA를 checkout하면 fork PR의 preview 배포에서 온 코드를 이 job이 실행한다.
+      # deployment_status는 base 저장소 권한과 secrets를 들고 도는 트리거라,
+      # `pull_request_target`과 같은 부류로 다뤄야 한다. 아래 env의 bypass secret이
+      # 그 코드의 손에 들어가는 경로가 된다.
+      #
+      # 그래서 실행할 코드는 항상 기본 브랜치 것을 쓴다. 배포 SHA는 기록에만 남긴다.
+      # 배포 커밋의 스펙으로 재는 편이 정확하지만, 그 정확도는 신뢰 경계와 맞바꿀 값이 아니다.
+      # smoke 3개는 어느 브랜치의 배포든 성립해야 하는 최소 계약이라 기본 브랜치 것으로 충분하다.
+      - name: Checkout smoke suite from default branch
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          ref: ${{ github.event.deployment.sha || github.sha }}
+          ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
       - name: Set up pnpm
         uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
@@ -39,8 +47,25 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
-      - name: Reject missing deployment URL
-        run: test -n "$DEPLOYMENT_URL"
+      # URL은 이벤트 payload나 수동 입력에서 온다. bypass secret을 헤더로 붙여 보내므로
+      # 보낼 상대를 먼저 좁힌다. 값이 비었는지만 보면 secret이 임의의 호스트로 나갈 수 있다.
+      - name: Reject unexpected deployment URL
+        run: |
+          if [[ -z "$DEPLOYMENT_URL" ]]; then
+            echo "DEPLOYMENT_URL이 없습니다." >&2
+            exit 1
+          fi
+
+          host=$(printf '%s' "$DEPLOYMENT_URL" | sed -E 's#^https://([^/]+).*#\1#')
+          if [[ "$host" == "$DEPLOYMENT_URL" ]]; then
+            echo "DEPLOYMENT_URL은 https URL이어야 합니다: $DEPLOYMENT_URL" >&2
+            exit 1
+          fi
+
+          if [[ "$host" != *.vercel.app ]]; then
+            echo "이 workflow는 Vercel 배포 URL만 검증합니다: $host" >&2
+            exit 1
+          fi
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Install Chromium

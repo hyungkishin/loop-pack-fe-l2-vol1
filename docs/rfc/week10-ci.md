@@ -185,7 +185,9 @@ after    FFmpeg (playwright ffmpeg v1011)
 | Lighthouse | 아니오 | 7주차 기준은 throttling 5회 중앙값이다. 공유 CI runner 한 번의 점수를 merge blocker로 쓰면 변동성을 결함으로 오인한다. |
 | AI 리뷰 | 아니오 | 모델과 프롬프트에 따라 결과가 바뀌므로 advisory로만 쓴다. |
 
-workflow 권한은 `contents: read`뿐이다. PR 코멘트와 secrets를 쓰지 않는다. checkout, setup-node, pnpm setup, artifact 액션은 commit SHA로 고정했다. `pull_request_target`도 사용하지 않는다.
+`quality`의 workflow 권한은 `contents: read`뿐이다. PR 코멘트와 secrets를 쓰지 않는다. checkout, setup-node, pnpm setup, artifact 액션은 commit SHA로 고정했다. `pull_request_target`도 사용하지 않는다.
+
+secrets를 쓰는 workflow는 `deployment-smoke` 하나다. `deployment_status`는 `pull_request_target`과 같이 base 저장소 권한과 secrets를 들고 도는 트리거라, 배포 SHA를 checkout하면 fork PR preview의 코드가 bypass secret이 있는 환경에서 실행된다. 실행 코드는 기본 브랜치에서 받고, 대상 URL도 https `*.vercel.app`으로 좁혔다. 근거는 `week10-release-flow.md`에 있다.
 
 ## H. 함께 생각해 볼 질문
 
